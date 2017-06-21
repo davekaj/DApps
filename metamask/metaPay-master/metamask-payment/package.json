@@ -1,0 +1,15 @@
+{
+  "name": "metamask-pay",
+  "version": "1.0.0",
+  "description": "A react component to include if you want to enable metamask users to pay you.",
+  "main": "index.js",
+  "scripts": {},
+  "author": "Alex Miller",
+  "license": "ISC",
+  "dependencies": {
+    "react": "latest",
+    "react-bootstrap": "latest",
+    "react-redux": "latest",
+    "whatwg-fetch": "^2.0.3"
+  }
+}
