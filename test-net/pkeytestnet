@@ -1,0 +1,17 @@
+24964fcbc9ceb96ad82e008708e6905ee23dbaed5c2999b573e2b519b895ad81
+
+
+his pkey info
+
+// Private Key
+23e4dfb937932332a3cf17f1fc0541e7dc2b7d0bef81289bfa04a251443b5666
+
+// Ethereum Address
+0x08cf02070bb9f167556c677da58e6678bbe871fc
+
+// Etherscan Account
+https://testnet.etherscan.io/address/0x08cf02070bb9f167556c677da58e6678bbe871fc
+
+var source = `contract helloWorld { function displayMessage() constant returns (string) { return "hihihihihi"; }]`
+
+var contract = decypher.createContrat(source, [], {gas: 1000000})
