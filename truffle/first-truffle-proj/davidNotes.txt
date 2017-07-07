@@ -1,0 +1,12 @@
+build folder holds artifacts in the form of .json files
+
+including raw contracts in your package will allow others to import those
+contracts within their own solidty code
+
+similarily, including your .json build artifacts in your packagewill allow others to seamlessly interact with
+your contracts from javascript, which can be used in dapps, scripts and migrations
+
+
+//these files are essentially for other users to see when you include them in your package. it will allow others to seamlessly interact with
+//your contracts from javascript, which cna be used in dapps, scripts, and migrations. 
+    //note you tried to write this inside of a contracts json file. it failed. do not try again. 

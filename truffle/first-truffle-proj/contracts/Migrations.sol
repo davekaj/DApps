@@ -21,3 +21,7 @@ contract Migrations {
     upgraded.setCompleted(last_completed_migration);
   }
 }
+
+// truffle requires you to have a migrations contract in order to use the migrations featute. so this must be an automatic contract. 
+
+//reading the code it looks like it just keeps track of all past kmigrations and moves forward, which is what the docs explained,. nice 
