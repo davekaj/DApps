@@ -1,0 +1,9 @@
+bower_components
+.DS_Store
+*.swp
+*.swo
+node_modules
+contracts/Standard_Token/config/development/contracts.json
+contracts/Standard_Token/config/test/contracts.json
+contracts/Standard_Token_Factory/config/development/contracts.json
+contracts/Standard_Token_Factory/config/test/contracts.json
