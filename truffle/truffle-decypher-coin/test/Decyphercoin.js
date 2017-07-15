@@ -147,6 +147,46 @@ contract('DecypherCoin', function (accounts) {
     });
   });
 
+/*i cant figure out how to send ether to a payable function!!
+
+  it("should let someone buy some coins with ether", function () {
+
+    var buyPriceSetByMinter = .001;
+    var sellPriCeSetByMinter = .000888;
+
+    var contractAddress = "0x9a13299e4ff1f32e2181252f4f822d4a0560cdef";
+
+    var guyBuyingcoins = accounts[6];
+    var etherBalance6 = web3.fromWei(web3.eth.getBalance(web3.eth.accounts[6]));
+    console.log("account 6 ether:" + etherBalance6);
+    var guys_starting_coin_balance;
+    var guys_ending_coin_balance;
+
+    return DecypherCoin.deployed().then(function (instance){
+      decypher = instance;
+     // console.log(decypher);
+      return decypher.setPrices(sellPriCeSetByMinter, buyPriceSetByMinter);
+    }).then(function (){
+      console.log("oy");
+      //return web3.eth.sendTransaction({from: guyBuyingcoins, to: decypher.buy(), value: web3.toWei("10", "Ether")});
+      return web3.eth.sendTransaction({from: accounts[6], to: decypher.address, value: web3.toWei("10", "Ether")});
+
+      //return decypher.buy().send(web3.toWei(10, "ether"))
+   }).then(function() {
+      console.log("asasA");
+      return decypher.balanceOf.call(guyBuyingcoins)
+    }).then(function(balance){
+      guys_ending_coin_balance = balance;
+      console.log("ending guys coin balance: " + guys_ending_coin_balance);
+    })
+
+  });
+
+*/
+
+
+
+
 
   it("should transfer minter address and then let him mint!", function () {
     var minterAddress = accounts[0];
@@ -157,6 +197,8 @@ contract('DecypherCoin', function (accounts) {
     var new_minter_starting_balance;
     var new_minter_ending_balance;
 
+
+
     return DecypherCoin.deployed().then(function (instance) {
       decypher = instance;
       return decypher.transferMinter(newMinterAddress);
@@ -165,7 +207,7 @@ contract('DecypherCoin', function (accounts) {
     }).then(function (balance) {
       console.log("balance start: " + balance);
       minter_starting_balance = balance.toNumber();
-      return decypher.mint(amountToMint, {from: newMinterAddress});
+      return decypher.mint(amountToMint, { from: newMinterAddress });
     }).then(function () {
       return decypher.balanceOf.call(newMinterAddress);
     }).then(function (balance) {
