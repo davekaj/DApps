@@ -360,7 +360,7 @@ contract FlightDelay is usingOraclize {
 	// constructor
 	function FlightDelay () {
 
-		owner = msg.sender;
+		owner = msg.sender; // owner of the contract, when uploaded to the blockchain
 		reentrantGuard = false; //%%%%%%%%%%%5 how does this work
 		maintenance_mode = maintenance_None;
 
@@ -371,13 +371,7 @@ contract FlightDelay is usingOraclize {
 	}
 
 	// create new policy
-	function newPolicy(
-		string _carrierFlightNumber, 
-		string _departureYearMonthDay, 
-		uint _departureTime, 
-		uint _arrivalTime
-		) 
-		notInMaintenance {
+	function newPolicy(string _carrierFlightNumber, string _departureYearMonthDay, uint _departureTime, uint _arrivalTime) notInMaintenance {
 
 		// sanity checks:
 

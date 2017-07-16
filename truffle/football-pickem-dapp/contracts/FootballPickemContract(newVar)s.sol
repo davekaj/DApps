@@ -12,7 +12,7 @@ things i am not sure about
 - how will i upload the games? all at once already? 16 different games you can enter? this has to do with the risk stsruct
 - wtf is mutex and how do i use it
 - so an _ in front of a varialbe is distiigushing local function variables from global variables
-- how does reentrant guard work and what does it do? i know i can find this on the internet
+- how does reentry guard work and what does it do? i know i can find this on the internet
 
 
 */
@@ -51,11 +51,11 @@ contract FootballPickemContract is usingOraclize {
 		if (maintenance_mode >= maintenance_emergency) throw;
 	}
 
-	modifier noRentract {
-		if (reentrantGuard) throw;
-		reentrantGuard = true;
+	modifier noRentrt {
+		if (reentryGuard) throw;
+		reentryGuard = true;
 		_
-		reentrantGuard = false;
+		reentryGuard = false;
 	}
 
 	//enums
@@ -63,13 +63,13 @@ contract FootballPickemContract is usingOraclize {
 	is not allowed. the explicit converstions check the value ranges at runtime and a failure causes an exception. enums need at least one number*/
 
 
-	// state of entrant Codes and meaning:
+	// state of entry Codes and meaning:
 	//
-	// 00 = Applied:	the entrant has payed a premium, but the oracle has
+	// 00 = Applied:	the entry has payed a premium, but the oracle has
 	//					not yet checked and confirmed.
 	// 01 = Accepted:	the oracle has checked and confirmed. // i dont think this is happening. i am just posting something to ipfs, maybe oracale does it, maybe not
 
-	// 02 = Winner:		Their 16 games are the best choice of all. only one entrant gets this
+	// 02 = Winner:		Their 16 games are the best choice of all. only one entry gets this
 	//					The oracle has checked and payed out.
 	// 03 = Loser:		Every other person is a loser
 	//					No payout.
@@ -81,7 +81,7 @@ contract FootballPickemContract is usingOraclize {
 	//					The funds remain in the contracts RiskFund.
 
 
-	enum stateOfEntrant { //these cab be labelled 00, 01, 02, 03, 04, 05, 06..... but do I need to do this?
+	enum stateOfentry { //these cab be labelled 00, 01, 02, 03, 04, 05, 06..... but do I need to do this?
 		Applied, 
 		Accepted,
 		Winner,
@@ -97,49 +97,50 @@ contract FootballPickemContract is usingOraclize {
 		CheckGamesForPayout}
 	//events
 
-	event LOG_EntrantApplied (
-		uint entrantID, //first entrant would be 1, 2, etc.
-		address entrant, //might be a duplicate vairalbe
+	event LOG_entryApplied (
+		//entryID has week information too
+		uint entryID, //first entry would be 1, 2. 
+		address user, //might be a duplicate vairalbe
 		string consolidatedBets, //this i want to be one long string that can be decrypted into the answer
 		//dont think i need the bet here, as all bets will be same. unless I have three differnt 
 	);
 
-	event LOG_EntrantAccepted(
-		uint entrantID,
+	event LOG_entryAccepted(
+		uint entryID,
 		//uint statistics?
 
 	);
-	event LOG_EntrantWinner(
-		uint entrantID,
+	event LOG_entryWinner(
+		uint entryID,
 		uint amount
 	);
-	event LOG_EntrantLoser(
-		uint entrantID
+	event LOG_entryLoser(
+		uint entryID
 	);
-	event LOG_EntrantDeclined(
-		uint entrantID,
+	event LOG_entryDeclined(
+		uint entryID,
 		bytes32 reason
 	);
 	//this is only if I have to go back and fix it. also maybe add on to later? 
-	event LOG_EntrantManualPayout(
-		uint entrantID,
+	event LOG_entryManualPayout(
+		uint entryID,
 		bytes32 reason
 		//does this need uint amount? it doesnt in the other policy 
 	);
 	event LOG_SendFail(
-		uint entrantID,
+		uint entryID,
 		bytes32 reason
 	);
 
 
 	//oraclize events
 	event LOG_OraclizeCall(
-		uint entrantID,
+		uint entryID,
 		bytes32 queryId,//used to interact with oracle
 		string oraclize_url
 	);
 	event LOG_OraclizeCallback(
-		uint entrantID,
+		uint entryID,
 		bytes32 queryId,
 		string result, //what the oracle brings back. should be results of all games, winners and total losers
 		bytes proof //the proof thing which i dont undertand fully
@@ -162,7 +163,7 @@ contract FootballPickemContract is usingOraclize {
 	uint contractDeadline;
 
 //might need to have a condition where if one person enters they dont lose any money
-	uint8 constant minimumEntrants = 2;
+	uint8 constant minimumEntries = 2;
 
 
 	//gas constant for oraclize. set at 500000 for now, might be changed
@@ -174,13 +175,13 @@ contract FootballPickemContract is usingOraclize {
 	uint8 constant percentFeeForErrors = 1; //1%, for if anyting evey goes wrong, there is money on reserve
 
 //accounting numbers
-	uint totalEntrants;
+	uint totalEntries;
 
-	//uint totalPayout = totalEntrants*betInEther; dont think i need this
+	//uint totalPayout = totalentrys*betInEther; dont think i need this
 
 
 // account numbers for the internal ledger
-	//sum of all entrant fees from users. will be a multiple of entrants entered
+	//sum of all entry fees from users. will be a multiple of entrys entered
 	uint8 constant poolFund = 0;
 	//small reward fund that is kept in case some accounting errors happen and things needs to be rounded off
 	uint8 constant errorFund = 1;
@@ -204,17 +205,17 @@ contract FootballPickemContract is usingOraclize {
 	string constant oracalizeGamesURL = "[URL] json(http://api.nfl.com)";
 	//guess you wouldnt really have to encrypt this data across the internet....
 	string constant oraclizeGamesQueryEncrypted = "?${[decrypt] AFDSGDFDSGFSDFSDGSDGSDG and some other shit}"
-	//entrant result. note that there will be multiple of these? or multiple calls into the contract. i don't know exactly how i am going to show that right now
-	string constant entrantsResults = "some results that are entered from the front end of the app. these need to be sent to oraclize, and then most likely stored on IPFS in a SAFE PLACE and encrypted so that no one knows what is uploaded. it should also be one line of text that gets decypted and solved. needs minimum storage"
-	//encrypted entrant result
-	string constant encryptEntrantResults;
+	//entry result. note that there will be multiple of these? or multiple calls into the contract. i don't know exactly how i am going to show that right now
+	string constant entrysResults = "some results that are entered from the front end of the app. these need to be sent to oraclize, and then most likely stored on IPFS in a SAFE PLACE and encrypted so that no one knows what is uploaded. it should also be one line of text that gets decypted and solved. needs minimum storage"
+	//encrypted entry result
+	string constant encryptentryResults;
 
 
 	//
 
-	struct entrant_Information {
-		//unique public addresss of entrant
-		address entrant;
+	struct entry_Information {
+		//unique public addresss of entry
+		address user;
 		//this should be a constant between each one
 		//uint amountWagered; nope, this is msg.value
 		//this will be based on how many people enter. really it can't be calculated until the first game is played. so it might not be in here at all. as there will be one state which pays out the whole policy
@@ -222,8 +223,10 @@ contract FootballPickemContract is usingOraclize {
 
 		string combinedStringOfUserEntries; // 01 05 14 13 etc. 
 
+		//pointer to the week that is needed
+		bytes32 weekID;
 		//status fields:
-		stateOfEntrant state;
+		stateOfentry state;
 		// 7 - time of last state change
 		uint stateTime;
 		// 8 - state change message/reason
@@ -232,17 +235,21 @@ contract FootballPickemContract is usingOraclize {
 		bytes proof;
 	}
 
-	//i cant think of any sceanario where i need another struct right now. but here for thought
-	struct risk {}
-	//hmmmmmm maybe this will be each weeks uploaded data. which could be grabbed based on time. or it could be uploaded by hand each week. BUT somehow the
-	//oracle needs to know each week is a different 'structure' of games in order. the other option is having all 16 games made BEFOREHAND. 
-	// then make a new contract next year when scheudle is out?
+	struct week {
+
+		uint numberOfGames;
+		uint lengthOfString;
+		string userChoicesString;
+		uint weekOfBetting;
+		//counter????
+	}
+
 
 
 	struct oraclizeCallback {
 
-		// for which entrant have we called?
-		uint entrantID;
+		// for which entry have we called?
+		uint entryID;
 		// for which purpose did we call? {ForUploadData | ForPayout}
 		oraclizeState oState;
 		uint oraclizeTime;
@@ -253,17 +260,17 @@ contract FootballPickemContract is usingOraclize {
 	address public owner; // guy who publishes contract (me)
 
 	//table of everyone who has entered
-	entrant_Information[] public entrants;
-	//lookup entrantIDs from entrant public addresses
-	mapping (address => uint[]) public entrantIds;
-	//lookup entrantIDs from queryIDs
+	entry_Information[] public entrys;
+	//lookup entryIDs from entry public addresses
+	mapping (address => uint[]) public entryIDs;
+	//lookup entryIDs from queryIDs
 	mapping (byes32 => oraclizeCallback) public oraclizeCallbacks;
 	mapping (bytes32 => risk) public risk // this would be the weekly games if i decided to do it this way
 	//Internal ledger
 	int[5] public ledger;
 
 	//Mutex
-	bool public reentrantGuard;
+	bool public reentryGuard;
 	uint8 public maintenance_mode;
 
 	function healthCheckContract() internal {
@@ -302,34 +309,34 @@ contract FootballPickemContract is usingOraclize {
 
 	}
 
-	function getEntrantCount(address _entrant) constant returns (uint _count) {
-		return entrants.length;
+	function getentryCount(address _user) constant returns (uint _count) {
+		return entrys.length;
 
-	function getEntrantWeeklyCount(address _entrant) constant returns (uint _count) { //i guess the plane one sees how many entries one use has. this would see how many weeks one user has?
-		return entrantIDs[_entrant].length
+	function getentryWeeklyCount(address _user) constant returns (uint _count) { //i guess the plane one sees how many entries one use has. this would see how many weeks one user has?
+		return entryIDs[_user].length
 	}
 
 
 //the problem is for this each preimum is unique. mine is a whole pool. so it will have to be used differently
 	function getOperatingCostsAndRemainingPool() internal returns (uint) {
 
-		uint entrantFee = msg.value;
-		uint updateDappFee = entrantFee*percentFeeForDapp / 100;
-		uint errorFee = entrantFee*percentFeeForErrors / 100;
+		uint entryFee = msg.value;
+		uint updateDappFee = entryFee*percentFeeForDapp / 100;
+		uint errorFee = entryFee*percentFeeForErrors / 100;
 
 
-		bookKeeping(contractBalance, poolFund, entrantFee);
+		bookKeeping(contractBalance, poolFund, entryFee);
 		bookKeeping(poolFund, updatingDappFund, updateDappFee);
 		bookKeeping(poolFund, errorFund, errorFee);
 
-		return (uint(entrantFee - updateDappFee - errorFee));
+		return (uint(entryFee - updateDappFee - errorFee));
 
 	}
 
 	//constructor
 	function FootballDapp () {
 		owner = msg.sender;
-		reentrantGuard = false;
+		reentryGuard = false;
 		maintenance_mode = maintenance_None;
 
 		//initialze the contract by putting in the start that I want to have for an error fund for backup
@@ -338,36 +345,36 @@ contract FootballPickemContract is usingOraclize {
 	}
 
 
-	function newEntrant(string  _combinedUserGameChoices, string _weekOfGames, uint _startfirstGameOfWeek, uint _endOfLastGameOfWeek) notInMaintenance {
+	function newentry(string  _combinedUserGameChoices, string _weekOfGames, uint _startfirstGameOfWeek, uint _endOfLastGameOfWeek) notInMaintenance {
 
 		if (msg.value !== 0.1) {
-			LOG_EntrantDeclined(0, 'All entrants must bet 0.1 ether');
+			LOG_entryDeclined(0, 'All entrys must bet 0.1 ether');
 			if (!msg.sender.send(msg.value)){
-				LOG_SendFail(0, 'newEntrant sending of EtherFailed (1)');
+				LOG_SendFail(0, 'newentry sending of EtherFailed (1)');
 			}
 			return;
 		}
 
 		if (_startfirstGameOfWeek > now + 1 hours{
-			LOG_EntrantDeclined(0, 'You must enter one hour before the start of the first game of the week');
+			LOG_entryDeclined(0, 'You must enter one hour before the start of the first game of the week');
 			if (!msg.send.send(msg.value)) {
 				LOG_SendFail(0, 'newPolicy sendback failed (3)');
 			}
 			return; 
 		}
 
-		//where entrants is a struct with ~5 values 
-		uint entrantID = entrants.length++;//figure out entrantID number based on previous ones that exist
-		entrantIDs[msg.sender].push(entrantID); //where entrantIDs is a mapping of addresses to entrantIDS for loookup
-		entrant_Information instance = entrants[entrantID];
+		//where entrys is a struct with ~5 values 
+		uint entryID = entrys.length++;//figure out entryID number based on previous ones that exist
+		entryIDs[msg.sender].push(entryID); //where entryIDs is a mapping of addresses to entryIDS for loookup
+		entry_Information instance = entrys[entryID];
 
-		instance.entrant = msg.sender;
-		instance.splitEntrantFee = getOperatingCostsAndRemainingPool();
+		instance.entry = msg.sender;
+		instance.splitentryFee = getOperatingCostsAndRemainingPool();
 
-		instance.state = stateOfEntrant.Applied;
-		instance.stateMessage = "Weekly bet applied successfully by entrant";
+		instance.state = stateOfentry.Applied;
+		instance.stateMessage = "Weekly bet applied successfully by entry";
 		instance.stateTime = now;
-		LOG_EntrantApplied(entrantID, msg.sender, _combinedUserGameChoices) //do i need to add weekly games to here
+		LOG_entryApplied(entryID, msg.sender, _combinedUserGameChoices) //do i need to add weekly games to here
 
 		acceptUserEntry();
 
@@ -380,13 +387,13 @@ contract FootballPickemContract is usingOraclize {
 
 	//underwrite
 	//takes the user entry from the from end, tries to prove that it is correct. if so, it goes to uploadToIPFS
-	function acceptUserEntry(uint _entrantID, bytes _proof) {
+	function acceptUserEntry(uint _entryID, bytes _proof) {
 
 
 		uploadToIPFS();
 
 
-		LOG_EntrantAccepted();
+		LOG_entryAccepted();
 
 
 
@@ -427,7 +434,7 @@ contract FootballPickemContract is usingOraclize {
 
 	//payout / 2
 	//make sure our data from IPFS is good. we then go ahead and calculate the points earned for each account
-	//most points wins, and we must call payout with that address/entrantID
+	//most points wins, and we must call payout with that address/entryID
 	function calculateWinner () {
 
 	}
@@ -483,7 +490,7 @@ removed
 
 
 workflow for MY APP 
--newEntrant
+-newentry
 	comfirmUserEntry - confirms the user Entry is good to go ===UNDERWRITE
 o		uploadToIFPS - once users entry is good, call IFPS and upload to there === SCEHDULEPAUOUTORACLIZE
 			dont use callback. leave it there till it is triggered by time.
@@ -506,7 +513,7 @@ i need to think when do I need things on the blockchain? and when do i need them
 	2. I do not want to hardcode in oracle games , as the last few weeks can change 
 		quickly or be TBD. so tuesdays or wednesdays, oracle should call for the 
 		games. but, then i want user to be able to enter games whenever. 
-			.....yeah this is front end stuff. i can change to accomodate. only release the entrant based on day i decide. so the games themselves should be hardcoded. but front end should let me change how people can enter and when
+			.....yeah this is front end stuff. i can change to accomodate. only release the entry based on day i decide. so the games themselves should be hardcoded. but front end should let me change how people can enter and when
 		and it only depedns on thursday start and monday end. so maybe its okay
 	3. i believe i want the oracle to upload the user bet to IPFS. i do not want 
 		to store that data on a server. this dApp is backend-less ... i think
@@ -529,7 +536,7 @@ i need to think when do I need things on the blockchain? and when do i need them
 	I should just forsure not hardcode it.
 	each week is a policy you can enter on in each year
 	the smart contract gets the next week one week ahead. it makes a new "policy"
-	the entrants can then enter on that week
+	the entrys can then enter on that week
 	which means i will have to close down and open up an old one and a new one on the same function
 	which means now i will have 4 steps.
 
@@ -541,6 +548,36 @@ i need to think when do I need things on the blockchain? and when do i need them
 		repeat
 
 		each new week will have 10-16 games, so strings will be different
+
+in flight one, there is a pool of possibile policiea (very large)
+	a customer can make 3 or 4 or 1 polciies. that individual one gets approved
+	each policyID holds the customer, and the choices  they made
+	determine if you win or lose from outside results. many diff policies can win
+
+
+in football app, there is a pool of possible weeks to play (smaller)
+	a customer can make 1 or 2 or 3 entries in one week, or multi weeks
+	each entryID should hold the customer address, and the choices they made.
+	which would be the week as well as the string chosen
+
+
+week 01 //chosenWeek
+	entry 01 //choosen String
+		address 0x
+		string DEN05H
+	entry 02
+	entry 03
+week 02
+	entry 01
+	entry 02
+	entry 03
+
+only one week at a time can be bet on. 
+this way i can have every entry be calculated in correct order and not mixed
+weeks will take on same view as risk. cuz its an outside variable changing payout
+and it doesnt make WEEK super important. week just is one thing that can be won. the
+results are seperate from the entry. entry is how you get paid out. it checks if your
+entry won based on results from risk. one person gets paid. end. 
 
 
 
