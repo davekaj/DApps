@@ -159,7 +159,10 @@ contract FootballPickemContract is usingOraclize {
 //general constants for the whole contract
 	uint constant betInEther = 0.1 ether; // should be like, 100 finney actually
 	//date that the contract ends. question for myself. Do i need to post a new contract each week? or can I have updated one ....
-	//note that if I had exactly one each week, new, i would have to be explicit and make sure people dont fuck up and send money elsewhere
+
+
+
+	//this would be the end of the 2017 season. lets make it 2017. i doubt the contract would not be updated 
 	uint contractDeadline;
 
 //might need to have a condition where if one person enters they dont lose any money
@@ -177,11 +180,11 @@ contract FootballPickemContract is usingOraclize {
 //accounting numbers
 	uint totalEntries;
 
-	//uint totalPayout = totalentrys*betInEther; dont think i need this
+	//uint totalPayout = totalentries*betInEther; dont think i need this
 
 
 // account numbers for the internal ledger
-	//sum of all entry fees from users. will be a multiple of entrys entered
+	//sum of all entry fees from users. will be a multiple of entries entered
 	uint8 constant poolFund = 0;
 	//small reward fund that is kept in case some accounting errors happen and things needs to be rounded off
 	uint8 constant errorFund = 1;
@@ -206,14 +209,14 @@ contract FootballPickemContract is usingOraclize {
 	//guess you wouldnt really have to encrypt this data across the internet....
 	string constant oraclizeGamesQueryEncrypted = "?${[decrypt] AFDSGDFDSGFSDFSDGSDGSDG and some other shit}"
 	//entry result. note that there will be multiple of these? or multiple calls into the contract. i don't know exactly how i am going to show that right now
-	string constant entrysResults = "some results that are entered from the front end of the app. these need to be sent to oraclize, and then most likely stored on IPFS in a SAFE PLACE and encrypted so that no one knows what is uploaded. it should also be one line of text that gets decypted and solved. needs minimum storage"
+	string constant entriesResults = "some results that are entered from the front end of the app. these need to be sent to oraclize, and then most likely stored on IPFS in a SAFE PLACE and encrypted so that no one knows what is uploaded. it should also be one line of text that gets decypted and solved. needs minimum storage"
 	//encrypted entry result
 	string constant encryptentryResults;
 
 
 	//
 
-	struct entry_Information {
+	struct entryInformation {
 		//unique public addresss of entry
 		address user;
 		//this should be a constant between each one
@@ -223,6 +226,7 @@ contract FootballPickemContract is usingOraclize {
 
 		string combinedStringOfUserEntries; // 01 05 14 13 etc. 
 
+		uint etherSentByUser; //0.1, in finney?
 		//pointer to the week that is needed
 		bytes32 weekID;
 		//status fields:
@@ -238,9 +242,9 @@ contract FootballPickemContract is usingOraclize {
 	struct week {
 
 		uint numberOfGames;
-		uint lengthOfString;
+		uint lengthOfString; //dont know if i need, but i could do a check that a string is x long based on num of games. DEN05H is 6 letters. times 16 games. shouldbe be 96. etc
 		string userChoicesString;
-		uint weekOfBetting;
+		uint weekOfBetting; //01, 02, 03, 04, 05
 		//counter????
 	}
 
@@ -260,11 +264,11 @@ contract FootballPickemContract is usingOraclize {
 	address public owner; // guy who publishes contract (me)
 
 	//table of everyone who has entered
-	entry_Information[] public entrys;
-	//lookup entryIDs from entry public addresses
+	entryInformation[] public entries;
+	//lookup entryIDs from entry public addresses. THIS MAKES SENSE NOW, CUZ ONE ADDRESS COULD HAVE AN EXPANDING UINT[] CUZ HE ENTERED MORE THAN ONCE, FOR ONE WEEK
 	mapping (address => uint[]) public entryIDs;
 	//lookup entryIDs from queryIDs
-	mapping (byes32 => oraclizeCallback) public oraclizeCallbacks;
+	mapping (bytes32 => oraclizeCallback) public oraclizeCallbacks;
 	mapping (bytes32 => risk) public risk // this would be the weekly games if i decided to do it this way
 	//Internal ledger
 	int[5] public ledger;
@@ -282,7 +286,7 @@ contract FootballPickemContract is usingOraclize {
 			LOG_HealthCheck('Balance is too high', diff, this.balance, ledger[contractBalance]);
 			maintenance_mode = maintenance_BalTooHigh;
 		} else {
-			LOG_HealthCheck('Balance too low, diff, this.balance, ledger[contractBalance]);
+			LOG_HealthCheck('Balance too low', diff, this.balance, ledger[contractBalance]);
 			maintenance_mode = maintenance_emergency;
 		}
 	}
@@ -310,7 +314,7 @@ contract FootballPickemContract is usingOraclize {
 	}
 
 	function getentryCount(address _user) constant returns (uint _count) {
-		return entrys.length;
+		return entries.length;
 
 	function getentryWeeklyCount(address _user) constant returns (uint _count) { //i guess the plane one sees how many entries one use has. this would see how many weeks one user has?
 		return entryIDs[_user].length
@@ -344,13 +348,13 @@ contract FootballPickemContract is usingOraclize {
 		oraclize_setProof(proofType_TLSNotary | proofStorage_IPFS); //need to read oraclize contract to dig into this
 	}
 
-
-	function newentry(string  _combinedUserGameChoices, string _weekOfGames, uint _startfirstGameOfWeek, uint _endOfLastGameOfWeek) notInMaintenance {
+	//looks at users words that they put in, and determines if the entry is acceptable. if so it moves on to be uploaded to IPFS
+	function newEntry(string  _weekOfGames, string _combinedUserGameChoices, uint _startfirstGameOfWeek, uint _endOfLastGameOfWeek) notInMaintenance {
 
 		if (msg.value !== 0.1) {
-			LOG_entryDeclined(0, 'All entrys must bet 0.1 ether');
+			LOG_entryDeclined(0, 'All entries must bet 0.1 ether');
 			if (!msg.sender.send(msg.value)){
-				LOG_SendFail(0, 'newentry sending of EtherFailed (1)');
+				LOG_SendFail(0, 'newEntry sending of EtherFailed (1)');
 			}
 			return;
 		}
@@ -358,18 +362,22 @@ contract FootballPickemContract is usingOraclize {
 		if (_startfirstGameOfWeek > now + 1 hours{
 			LOG_entryDeclined(0, 'You must enter one hour before the start of the first game of the week');
 			if (!msg.send.send(msg.value)) {
-				LOG_SendFail(0, 'newPolicy sendback failed (3)');
+				LOG_SendFail(0, 'newEntry sendback failed (3)');
 			}
 			return; 
 		}
 
-		//where entrys is a struct with ~5 values 
-		uint entryID = entrys.length++;//figure out entryID number based on previous ones that exist
-		entryIDs[msg.sender].push(entryID); //where entryIDs is a mapping of addresses to entryIDS for loookup
-		entry_Information instance = entrys[entryID];
+//i probably dont need game end time, but i think i need to 
 
-		instance.entry = msg.sender;
-		instance.splitentryFee = getOperatingCostsAndRemainingPool();
+
+		//where entries is a struct with ~5 values 
+		uint entryID = entries.length++;//figure out entryID number based on previous ones that exist
+		entryIDs[msg.sender].push(entryID); //where entryIDs is a mapping of addresses to entryIDS for loookup
+		entryInformation instance = entries[entryID];
+
+		instance.user = msg.sender;
+		instance.etherSentByUser = getOperatingCostsAndRemainingPool();
+		instance.weekID = _weekOfGames;
 
 		instance.state = stateOfentry.Applied;
 		instance.stateMessage = "Weekly bet applied successfully by entry";
@@ -386,8 +394,9 @@ contract FootballPickemContract is usingOraclize {
 	}
 
 	//underwrite
-	//takes the user entry from the from end, tries to prove that it is correct. if so, it goes to uploadToIPFS
-	function acceptUserEntry(uint _entryID, bytes _proof) {
+	// it goes to uploadToIPFS. user entry is approve in newEntry
+
+	function acceptUserEntry(uint _entryID, bytes _proof) { //_entryID here is used to get all information from the entryID, so i dont have to pass a ton of data to here
 
 
 		uploadToIPFS();
@@ -536,7 +545,7 @@ i need to think when do I need things on the blockchain? and when do i need them
 	I should just forsure not hardcode it.
 	each week is a policy you can enter on in each year
 	the smart contract gets the next week one week ahead. it makes a new "policy"
-	the entrys can then enter on that week
+	the entries can then enter on that week
 	which means i will have to close down and open up an old one and a new one on the same function
 	which means now i will have 4 steps.
 
@@ -579,6 +588,126 @@ and it doesnt make WEEK super important. week just is one thing that can be won.
 results are seperate from the entry. entry is how you get paid out. it checks if your
 entry won based on results from risk. one person gets paid. end. 
 
+
+
+
+API INFORMATION
+	Full game schedule, weeks 1 through 17. call to this once at the start of every Tuesday Morning
+		https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/full_game_schedule.json?
+	Thursday Night Games (week 1 2016)
+		https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/daily_game_schedule.json?fordate=20160908
+	Sunday Games (week 1 2016)
+		https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=20160911
+	Monday Games
+		https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=20160912
+
+SCORES
+
+	think you would ahve 15 strings DEN05H which is denver home team game, 5 points, if home team wins
+	parse into
+	string abbrev = 'DEN'
+	uint8 pointsToWin = 05;
+	string teamToWin = 'H'
+	uint8 totalPoints;
+	if(scoreboard.gamescore.game.homeTeam.Abbreviation === DEN ) {
+		if (teamToWin === 'H') {
+			if (scoreboard.gamescore.game.homeScore > scoreboard.gamescore.game.awayScore ) {
+				totalPoints += pointsToWin
+			}
+		} else if (scoreboard.gamescore.game.homeScore < scoreboard.gamescore.game.awayScore ) {
+			totalPoints += pointsToWin
+	}
+
+{
+	scoreboard: {
+	lastUpdatedOn: "2017-06-19 10:06:20 AM",
+		gameScore: [
+			{
+			game: {
+				ID: "35171",
+				date: "2016-09-08",
+				time: "8:30PM",
+				awayTeam: {
+					ID: "69",
+					City: "Carolina",
+					Name: "Panthers",
+					Abbreviation: "CAR"
+				},
+				homeTeam: {
+					ID: "72",
+					City: "Denver",
+					Name: "Broncos",
+					Abbreviation: "DEN"
+				},
+				location: "Sports Authority Field"
+				},
+				isUnplayed: "false",
+				isInProgress: "false",
+				isCompleted: "true",
+				awayScore: "20",
+				homeScore: "21",
+				quarterSummary: {
+					quarter: [
+					{
+						@number: "1",
+						awayScore: "7",
+						homeScore: "0"
+					},
+					{
+						@number: "2",
+						awayScore: "10",
+						homeScore: "7"
+					},
+					{
+						@number: "3",
+						awayScore: "0",
+						homeScore: "0"
+					},
+					{
+						@number: "4",
+						awayScore: "3",
+						homeScore: "14"
+					}
+				]
+			}
+		}
+	]
+	}
+}
+
+
+GAMES
+.fullgameschedule
+{
+
+	fullgameschedule: {
+		lastUpdatedOn: "2017-07-10 10:43:36 AM",
+		gameentry: [
+		{
+			id: "35171",
+			week: "1",
+			date: "2016-09-08",
+			time: "8:30PM",
+			awayTeam: {
+				ID: "69",
+				City: "Carolina",
+				Name: "Panthers",
+				Abbreviation: "CAR"
+			},
+			homeTeam: {
+				ID: "72",
+				City: "Denver",
+				Name: "Broncos",
+				Abbreviation: "DEN"
+			},
+			location: "Sports Authority Field"
+	},
+}
+
+
+
+i need to figure out how much of this I can do OFF the blockchain, off of solidity
+but can solidity do calculations, without costing the EVM
 
 
 */
