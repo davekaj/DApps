@@ -31,7 +31,7 @@ pragma solidity ^0.4.12;
 
 
 import "./github.com/oraclize/ethereum-api/oraclizeAPI.sol";
-import "./github.com/Arachnid/solidity-stringutils/strings.sol";
+import "https://raw.githubusercontent.com/Arachnid/solidity-stringutils/master/strings.sol";
 
 contract FootballPickemContract is usingOraclize {
 
@@ -51,7 +51,7 @@ contract FootballPickemContract is usingOraclize {
 		if (maintenance_mode >= maintenance_emergency) throw;
 	}
 
-	modifier noRentrt {
+	modifier noRentry {
 		if (reentryGuard) throw;
 		reentryGuard = true;
 		_
@@ -91,11 +91,7 @@ contract FootballPickemContract is usingOraclize {
 	}
 
 	//  secure an entry and call the oracle to place it in IPFS (is this what it acutally does lol? maybe note), and check games for payout monday night at 1am
-	enum oraclizeState {
-		SecureAnEntry, 
-		//getAllEntries?? ....need?
-		CheckGamesForPayout}
-	//events
+	enum oraclizeState {GetThursday, GetSunday, GetMonday}
 
 	event LOG_entryApplied (
 		//entryID has week information too
@@ -203,16 +199,41 @@ contract FootballPickemContract is usingOraclize {
 	uint8 constant maintenance_Emergency = 255;
 
 
-//urls and query strings for oraclize
-	//for getting the game results
-	string constant oracalizeGamesURL = "[URL] json(http://api.nfl.com)";
-	//guess you wouldnt really have to encrypt this data across the internet....
-	string constant oraclizeGamesQueryEncrypted = "?${[decrypt] AFDSGDFDSGFSDFSDGSDGSDG and some other shit}"
-	//entry result. note that there will be multiple of these? or multiple calls into the contract. i don't know exactly how i am going to show that right now
-	string constant entriesResults = "some results that are entered from the front end of the app. these need to be sent to oraclize, and then most likely stored on IPFS in a SAFE PLACE and encrypted so that no one knows what is uploaded. it should also be one line of text that gets decypted and solved. needs minimum storage"
-	//encrypted entry result
-	string constant encryptentryResults;
+/*
+	API INFORMATION
+		Full game schedule, weeks 1 through 17. call to this once at the start of every Tuesday Morning
+			https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/full_game_schedule.json?
+		Thursday Night Games (week 1 2016)
+			https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/daily_game_schedule.json?fordate=20160908
+		Sunday Games (week 1 2016)
+			https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=20160911
+		Monday Games
+			https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=20160912
 
+			*/
+
+//urls and query strings for oraclize
+	//for getting the game results ****THESE ARE SET TO LAST YEAR, SO I CAN TEST! FOR 2 WEEKS TILL PRESEASON
+	//string constant oracalizeDailyGamesURL = "[URL] json(https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/daily_game_schedule.json?fordate=)";
+
+	//these are bases. they start at the first week of the month. the function will find current week, and add week to there
+	string constant oracalizeBaseQueryThurs = "20160908"; //thursday 2016
+	string constant oracalizeBaseQuerySun = "20160911"; //sun 2016
+	string constant oracalizeBaseQueryMon = "20160912"; //monday 2016 + 1 weeks, etc. etc.
+	string constant oracalizeScoreBoardDaily = "[URL] json(ttps://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=)";
+
+	//guess you wouldnt really have to encrypt this data across the internet.... *** I WILL ENCRYPY LATER. MVP
+//	string constant oraclizeGamesQueryEncrypted = "?${[decrypt] AFDSGDFDSGFSDFSDGSDGSDG and some other shit}"
+//?? do i need these?
+	//entry result. note that there will be multiple of these? or multiple calls into the contract. i don't know exactly how i am going to show that right now
+//	string constant entriesResults = "some results that are entered from the front end of the app. these need to be sent to oraclize, and then most likely stored on IPFS in a SAFE PLACE and encrypted so that no one knows what is uploaded. it should also be one line of text that gets decypted and solved. needs minimum storage"
+	//encrypted entry result
+//	string constant encryptentryResults;
+
+
+	//new constant needed to record API. counter too
+	string apiResultsForCombining = "";
+	uint8 counterAPIDays = 0;
 
 	//
 
@@ -242,8 +263,8 @@ contract FootballPickemContract is usingOraclize {
 	struct week {
 
 		uint numberOfGames;
-		uint lengthOfString; //dont know if i need, but i could do a check that a string is x long based on num of games. DEN05H is 6 letters. times 16 games. shouldbe be 96. etc
-		string userChoicesString;
+		//uint lengthOfString; //dont know if i need, but i could do a check that a string is x long based on num of games. DEN05H is 6 letters. times 16 games. shouldbe be 96. etc
+		//string userChoicesString;
 		uint weekOfBetting; //01, 02, 03, 04, 05
 		//counter????
 	}
@@ -269,7 +290,7 @@ contract FootballPickemContract is usingOraclize {
 	mapping (address => uint[]) public entryIDs;
 	//lookup entryIDs from queryIDs
 	mapping (bytes32 => oraclizeCallback) public oraclizeCallbacks;
-	mapping (bytes32 => risk) public risk // this would be the weekly games if i decided to do it this way
+	mapping (uint8 => week) public weeks // this would be the weekly games if i decided to do it this way
 	//Internal ledger
 	int[5] public ledger;
 
@@ -349,8 +370,12 @@ contract FootballPickemContract is usingOraclize {
 	}
 
 	//looks at users words that they put in, and determines if the entry is acceptable. if so it moves on to be uploaded to IPFS
-	function newEntry(string  _weekOfGames, string _combinedUserGameChoices, uint _startfirstGameOfWeek, uint _endOfLastGameOfWeek) notInMaintenance {
+	function newEntry(string  _weekOfGames, string _combinedUserGameChoices, uint _startfirstGameOfWeek) notInMaintenance {
+		uint _startOf2017Season = 1501702200; //august 2nd, 730pm 2017
+		uint _endOf2017Season = 1514808000; //january 1st, noon, 2018
 
+
+		//this logic is you are not allowed to enter
 		if (msg.value !== 0.1) {
 			LOG_entryDeclined(0, 'All entries must bet 0.1 ether');
 			if (!msg.sender.send(msg.value)){
@@ -359,16 +384,27 @@ contract FootballPickemContract is usingOraclize {
 			return;
 		}
 
-		if (_startfirstGameOfWeek > now + 1 hours{
-			LOG_entryDeclined(0, 'You must enter one hour before the start of the first game of the week');
+		if (_startfirstGameOfWeek > now + 1 hours || _startfirstGameOfWeek < _startOf2017Season || _startfirstGameOfWeek > _endOf2017Season){
+			LOG_entryDeclined(0, 'Must be 2017 season and at least 1 hour before 1st game of week');
 			if (!msg.send.send(msg.value)) {
-				LOG_SendFail(0, 'newEntry sendback failed (3)');
+				LOG_SendFail(0, 'newEntry sendback failed (2)');
 			}
 			return; 
 		}
 
-//i probably dont need game end time, but i think i need to 
+		uint _currentWeek = Math.floor((now - _startOf2017Season) / 1 weeks) + 1;
 
+//this is over confusing me, just continue. im sure i will spend hours on this later
+		if (_currentWeek !== _weekOfGames) {
+			LOG_entryDeclined(0, 'Must bet only during current week');
+			if (!msg.send.send(msg.value)) {
+				LOG_SendFail(0, 'newEntry sendback failed(3)');
+			}
+		}
+
+
+		//the first guy to make an entry into the new week will cause this function to get called to get the week needed
+		if
 
 		//where entries is a struct with ~5 values 
 		uint entryID = entries.length++;//figure out entryID number based on previous ones that exist
@@ -378,51 +414,133 @@ contract FootballPickemContract is usingOraclize {
 		instance.user = msg.sender;
 		instance.etherSentByUser = getOperatingCostsAndRemainingPool();
 		instance.weekID = _weekOfGames;
+		instance.combinedStringOfUserEntries = _combinedUserGameChoices;
 
 		instance.state = stateOfentry.Applied;
 		instance.stateMessage = "Weekly bet applied successfully by entry";
 		instance.stateTime = now;
 		LOG_entryApplied(entryID, msg.sender, _combinedUserGameChoices) //do i need to add weekly games to here
 
-		acceptUserEntry();
+		//now youve entered, but we gotta see if you string is okay, then log entryAccepted
+		acceptUserEntry(entryID);
 
 	}
 
+/*it will already have the policy/week uploaded
 
+they need to get user entry, use oracle to get flight stats, then underwrite or payout
+which is where they check the results, and they might decline. if its a payout they call o
+oracle, , see if it worked, then run through payout
+
+i need to get user entires. check if week is uploaded. upload if it isnt
+check if user entry is correct. then upload to EVM
+
+then i need to keep doing that until time is triggered. i then i pull game data
+check who won. pay them out. download and open new week
+*/
 	function decline () {
 
 	}
 
 	//underwrite
-	// it goes to uploadToIPFS. user entry is approve in newEntry
+	//this is acutally putOnEVM. i do not use oracle here
 
-	function acceptUserEntry(uint _entryID, bytes _proof) { //_entryID here is used to get all information from the entryID, so i dont have to pass a ton of data to here
-
-
-		uploadToIPFS();
+	function acceptUserEntry(uint _entryID) { //_entryID here is used to get all information from the entryID, so i dont have to pass a ton of data to here
+		entry instance = entries[_entryID]
 
 
-		LOG_entryAccepted();
+
+		//putOnEVM();
+
+		//logic to check if the actual entry is valid. this is not part of MVP so later
+		// 
+
+		LOG_entryAccepted(
+			_entryID
+		);
 
 
 
 	}
 
+//NOT USING, NOT ORACLE AT START
 	//o
 	//schedulePayoutOraclize
 	//this calls oraclize to upload to IPFS. 
-	function uploadToIPFS () {
+	/*
+	function putOnEVM () {
 
 		bytes32 queryID = oraclize_query(_oraclizeTime, 'nested', oraclize_url, oraclizeGas);
 		bookkeeping();
 		oraclizeCallbacks[queryId] = oraclizeCallback()
-	}
+	}*/
 
 	//o
 	//getFlightStats
 	//uses oraclize to call out to a football API. 
-	function checkGames () {
 
+
+	//week 15 has sat and thurs games. week 16 has just sat sun mon. week 17 has only sunday. whole preseason Is FUCKED2
+
+	/*
+	function checkThursGames (uint _weekOfPayout) {
+		//somehow need to trigger this based on time....
+		//***********i believe i could use orazclize to schedule a new query a week in the future! :):):)
+		//***count make it autonomous with always checking itself
+		uint currentWeekThursUnix = oracalizeBaseQueryThurs + _weekOfPayout*(1 weeks);
+		uint currentWeekSunUnix = oracalizeBaseQuerySun + _weekOfPayout*(1 weeks);
+		uint currentWeekMonUnix = oracalizeBaseQueryMon + _weekOfPayout*(1 weeks);
+
+//.scroeboard.gamescore if i wanted to get specific. but its no help
+
+//import solidity string 
+		if (counterAPIDays === 0) {
+			string memory oraclize_url_thurs = strConcat(oracalizeScoreBoardDaily, currentWeekThursUnix);		
+			bytes32 queryId = oraclize_query("nested", oraclize_url_thurs, oraclizeGas);
+		} else if (counterAPIDays === 1) {
+			string memory oraclize_url_sun = strConcat(oracalizeScoreBoardDaily, currentWeekSunUnix);		
+			bytes32 queryId = oraclize_query("nested", oraclize_url_sun, oraclizeGas);
+		} else (counterAPIDays === 2) {
+			string memory oraclize_url_mon = strConcat(oracalizeScoreBoardDaily, currentWeekMonUnix);		
+			bytes32 queryId = oraclize_query("nested", oraclize_url_mon, oraclizeGas);
+		}
+		*/
+
+		//am going to do just one game, sundays, to make easy for now 
+		//week of payout is similar to policyID
+	function checkOneDayOfGames (uint _weekOfPayout){
+		uint currentWeekSunUnix = oracalizeBaseQuerySun + _weekOfPayout*(1 weeks);
+
+		string memory oraclize_url_sun = strConcat(oracalizeScoreBoardDaily, currentWeekSunUnix);		
+		bytes32 queryId = oraclize_query("nested", oraclize_url_sun, oraclizeGas);
+	
+	//dont get the negative here
+		bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance])- int(this.balance)));
+
+		LOG_OraclizeCall(_weekOfPayout, queryID, oraclize_url_sun);
+	}
+
+
+
+
+/*		
+	SCORES
+
+		think you would ahve 15 strings DEN05H which is denver home team game, 5 points, if home team wins
+		parse into
+		string abbrev = 'DEN'
+		uint8 pointsToWin = 05;
+		string teamToWin = 'H'
+		uint8 totalPoints;
+		if(scoreboard.gamescore.game.homeTeam.Abbreviation === DEN ) {
+			if (teamToWin === 'H') {
+				if (scoreboard.gamescore.game.homeScore > scoreboard.gamescore.game.awayScore ) {
+					totalPoints += pointsToWin
+				}
+			} else if (scoreboard.gamescore.game.homeScore < scoreboard.gamescore.game.awayScore ) {
+				totalPoints += pointsToWin
+		}
+		*/
 	}
 
 	//o
@@ -430,194 +548,25 @@ contract FootballPickemContract is usingOraclize {
 	// this __callback only used after checkGames. needs to make sure all games were properly
 	//completed. if so, we go and let oraclize call IPFS to get users entries, and give them
 	//to the smart contract 
-	function __callBack () {
+	function __callBack (bytes32 _queryId, string _result, bytes _proof) onlyOraclize noRentry{
+	//	make sure the games are what we want, then call pullFromEVM
+	
+	//dont use a counter. use oraclzie state 
+		oraclizeCallback memory instance = oralcizeCallbacks[_queryId];
+		LOG_OraclizeCallback(instance.weekOfBetting, _queryId, _result, _proof); //weekOfBetting from week struct , part of oraclized callbacks mapping
 
-	}
+		//here we would have callbacks going for more dates. but not Today!
 
-	//o
-	//schedulePayoutOraclize
-	//pulls data from IPFS. calls calculate winner
-	function pullFromIPFS () {
+		calculateWinner(/*instance.weekOfBetting*/_queryId, _result, _proof);
 
-	}
-
-	//payout / 2
-	//make sure our data from IPFS is good. we then go ahead and calculate the points earned for each account
-	//most points wins, and we must call payout with that address/entryID
-	function calculateWinner () {
-
-	}
-
-	//payout / 2
-	//most of calculating done in calculateWinner. this is just to seperate the functions
-	function payout () {
 
 	}
 
 
-
-
-
-
-
-
-
-}
-
+	//payout
+	//pay the address that gets the most points
 
 /*
-
-workflow of flight app
--newpolicy
-	getFlightStats - which uses oracle. and then 
-		__Callback - which will decide to call either underwrite or Payout
-			callback_ForUnderwriting - which does the neat calcs and parsing strings
-				underwrite - called when all is working. and it finalizes all data on the users end and his poilcy esists
-					schedulePayoutOraclizeCall - does some oraclize calls. uses struct oraclizeCallback. might do oracle callback
-						END
-			callback_ForPayout
-				ERROR - schedulePayoutOraclizeCall - will look to schedulePayoutOracalizecall if there is problem. might do a callback
-				does some nice parsing, then calls payout. 
-				also will let you do LOG_PolicyManualPayout
-					payout - will just do some calcs and then payout the dude who wins
-						END
-
-
-my functions (5, and declined, so 6)
-
-confirmUserEntry (underwrite)
-	uploadtoIPFS (schedulePayoutOraclize)
-checkWinner (getFlightStats)
-	__callback
-	pullFromIPFS (schedulePayoutOraclize)
-	calculateWinner (payout split in 2)
-	payout (payout split in two)
-
-removed
-	callback_forUnderwriting
-	callback_forPayout
-
-
-workflow for MY APP 
--newentry
-	comfirmUserEntry - confirms the user Entry is good to go ===UNDERWRITE
-o		uploadToIFPS - once users entry is good, call IFPS and upload to there === SCEHDULEPAUOUTORACLIZE
-			dont use callback. leave it there till it is triggered by time.
-
--checkWinner (based on time)
-o	confirmWeekIsOver - confirm no errors in week, uses oracle to go get results from game ===GET FLIGHT STATS
-o		__callback ????
-o			pullFromIPFS - all results are in, so go get the user entries ===SIMILAR TO SCHEDULEPAYOUTORACLE. but we pulling data yo!
-				calculateWinner - take all results, parse em into numbers that are related to the account
-				ERROR checking. manual payout
-					payout - take the highest number and make him a winner
-
-
-
-
-
-i need to think, how often do I need to make oracle calls???????
-i need to think when do I need things on the blockchain? and when do i need them off the blockchain
-	1. definetly need to get oracle to call for the game results
-	2. I do not want to hardcode in oracle games , as the last few weeks can change 
-		quickly or be TBD. so tuesdays or wednesdays, oracle should call for the 
-		games. but, then i want user to be able to enter games whenever. 
-			.....yeah this is front end stuff. i can change to accomodate. only release the entry based on day i decide. so the games themselves should be hardcoded. but front end should let me change how people can enter and when
-		and it only depedns on thursday start and monday end. so maybe its okay
-	3. i believe i want the oracle to upload the user bet to IPFS. i do not want 
-		to store that data on a server. this dApp is backend-less ... i think
-	4.oracle then needs to call off all the of the values from IPFS and give 
-		back to smartContract to add up scores and see who won. 
-		highest score gets paid out
-
-	so in summary. pull game results. post on ipfs. pull from ipfs
-	the other has pull risk, post on ipfs. pull flight result, pull ifps. i have one less step in risk 
-	
-
-	how does winning logic look. oracle needs to grab the 16 games and have Home and away. it will
-		parse the string, and maybe go HOMETEAMTAG05H. so denver home vs seattle, pick denver to
-		 win is DEN05H. seattle is DEN05S. YES!... but needs updating based on what API i use
-		 it also needs to show all users entries at the end, so that people know they legitimately won. front end thou
-
-
-
-/*how do I want to set up betting on the WEEKS and YEARS	
-	I should just forsure not hardcode it.
-	each week is a policy you can enter on in each year
-	the smart contract gets the next week one week ahead. it makes a new "policy"
-	the entries can then enter on that week
-	which means i will have to close down and open up an old one and a new one on the same function
-	which means now i will have 4 steps.
-
-		(initiation) pull so we have two weeks
-		post users entries on ifps
-		pull game results. 
-		oull from ipfs and confirm winner and payour
-		pull new week, open it to entry
-		repeat
-
-		each new week will have 10-16 games, so strings will be different
-
-in flight one, there is a pool of possibile policiea (very large)
-	a customer can make 3 or 4 or 1 polciies. that individual one gets approved
-	each policyID holds the customer, and the choices  they made
-	determine if you win or lose from outside results. many diff policies can win
-
-
-in football app, there is a pool of possible weeks to play (smaller)
-	a customer can make 1 or 2 or 3 entries in one week, or multi weeks
-	each entryID should hold the customer address, and the choices they made.
-	which would be the week as well as the string chosen
-
-
-week 01 //chosenWeek
-	entry 01 //choosen String
-		address 0x
-		string DEN05H
-	entry 02
-	entry 03
-week 02
-	entry 01
-	entry 02
-	entry 03
-
-only one week at a time can be bet on. 
-this way i can have every entry be calculated in correct order and not mixed
-weeks will take on same view as risk. cuz its an outside variable changing payout
-and it doesnt make WEEK super important. week just is one thing that can be won. the
-results are seperate from the entry. entry is how you get paid out. it checks if your
-entry won based on results from risk. one person gets paid. end. 
-
-
-
-
-API INFORMATION
-	Full game schedule, weeks 1 through 17. call to this once at the start of every Tuesday Morning
-		https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/full_game_schedule.json?
-	Thursday Night Games (week 1 2016)
-		https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/daily_game_schedule.json?fordate=20160908
-	Sunday Games (week 1 2016)
-		https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=20160911
-	Monday Games
-		https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=20160912
-
-SCORES
-
-	think you would ahve 15 strings DEN05H which is denver home team game, 5 points, if home team wins
-	parse into
-	string abbrev = 'DEN'
-	uint8 pointsToWin = 05;
-	string teamToWin = 'H'
-	uint8 totalPoints;
-	if(scoreboard.gamescore.game.homeTeam.Abbreviation === DEN ) {
-		if (teamToWin === 'H') {
-			if (scoreboard.gamescore.game.homeScore > scoreboard.gamescore.game.awayScore ) {
-				totalPoints += pointsToWin
-			}
-		} else if (scoreboard.gamescore.game.homeScore < scoreboard.gamescore.game.awayScore ) {
-			totalPoints += pointsToWin
-	}
-
 {
 	scoreboard: {
 	lastUpdatedOn: "2017-06-19 10:06:20 AM",
@@ -673,7 +622,178 @@ SCORES
 		}
 	]
 	}
+}*/
+
+
+
+	function calculateWinner () {
+		//parse the data from EVM.
+		//if you typed in the wrong value, your fault you dont get paid back for now. ie. dont worry about string length
+		//add up scores of each guy
+		//go to payout 
+	
+		// https://github.com/Arachnid/solidity-stringutils
+
+/*THIS IS GOING TO BE FUCKING HARD! BUT I CAN DO IT!. i am a solidity prodigy */
+
+
+		// figures out which week we are assessing who won
+		oraclizeCallback memory instance = oraclizeCallbacks[_queryID]
+
+		uint weekID = instance.weekOfBetting;
+		var sliceResult = _result.toSlice();
+	}
+
+
+	//payout / 2
+	//most of calculating done in calculateWinner. this is just to seperate the functions
+	function payout () {
+
+	}
+
+//fallback function: dont accept ether, except from owner
+function () onlyOwner {
+	//put additional funds into error fund
+	bookkeeping(contractBalance, errorFund, msg.value)
 }
+
+
+
+
+
+
+}
+
+
+/*
+
+workflow of flight app
+-newpolicy
+	getFlightStats - which uses oracle. and then 
+		__Callback - which will decide to call either underwrite or Payout
+			callback_ForUnderwriting - which does the neat calcs and parsing strings
+				underwrite - called when all is working. and it finalizes all data on the users end and his poilcy esists
+					schedulePayoutOraclizeCall - does some oraclize calls. uses struct oraclizeCallback. might do oracle callback
+						END
+			callback_ForPayout
+				ERROR - schedulePayoutOraclizeCall - will look to schedulePayoutOracalizecall if there is problem. might do a callback
+				does some nice parsing, then calls payout. 
+				also will let you do LOG_PolicyManualPayout
+					payout - will just do some calcs and then payout the dude who wins
+						END
+
+
+my functions (5, and declined, so 6)
+
+confirmUserEntry (underwrite)
+	putOnEVM (schedulePayoutOraclize)
+checkWinner (getFlightStats)
+	__callback
+	pullFromEVM (schedulePayoutOraclize)
+	calculateWinner (payout split in 2)
+	payout (payout split in two)
+
+removed
+	callback_forUnderwriting
+	callback_forPayout
+
+
+workflow for MY APP 
+-newentry
+	comfirmUserEntry - confirms the user Entry is good to go ===UNDERWRITE
+o		uploadToIFPS - once users entry is good, call IFPS and upload to there === SCEHDULEPAUOUTORACLIZE
+			dont use callback. leave it there till it is triggered by time.
+
+-checkWinner (based on time)
+o	confirmWeekIsOver - confirm no errors in week, uses oracle to go get results from game ===GET FLIGHT STATS
+o		__callback ????
+o			pullFromEVM - all results are in, so go get the user entries ===SIMILAR TO SCHEDULEPAYOUTORACLE. but we pulling data yo!
+				calculateWinner - take all results, parse em into numbers that are related to the account
+				ERROR checking. manual payout
+					payout - take the highest number and make him a winner
+
+
+
+
+
+i need to think, how often do I need to make oracle calls???????
+i need to think when do I need things on the blockchain? and when do i need them off the blockchain
+	1. definetly need to get oracle to call for the game results
+	2. I do not want to hardcode in oracle games , as the last few weeks can change 
+		quickly or be TBD. so tuesdays or wednesdays, oracle should call for the 
+		games. but, then i want user to be able to enter games whenever. 
+			.....yeah this is front end stuff. i can change to accomodate. only release the entry based on day i decide. so the games themselves should be hardcoded. but front end should let me change how people can enter and when
+		and it only depedns on thursday start and monday end. so maybe its okay
+	3. i believe i want the oracle to upload the user bet to IPFS. i do not want 
+		to store that data on a server. this dApp is backend-less ... i think
+	4.oracle then needs to call off all the of the values from IPFS and give 
+		back to smartContract to add up scores and see who won. 
+		highest score gets paid out
+
+	so in summary. pull game results. post on ipfs. pull from ipfs
+	the other has pull risk, post on ipfs. pull flight result, pull ifps. i have one less step in risk 
+	
+
+	how does winning logic look. oracle needs to grab the 16 games and have Home and away. it will
+		parse the string, and maybe go HOMETEAMTAG05H. so denver home vs seattle, pick denver to
+		 win is DEN05H. seattle is DEN05S. YES!... but needs updating based on what API i use
+		 it also needs to show all users entries at the end, so that people know they legitimately won. front end thou
+
+
+
+/*how do I want to set up betting on the WEEKS and YEARS	
+	I should just forsure not hardcode it.
+	each week is a policy you can enter on in each year
+	the smart contract gets the next week one week ahead. it makes a new "policy"
+	the entries can then enter on that week
+	which means i will have to close down and open up an old one and a new one on the same function
+	which means now i will have 4 steps.
+
+o		(initiation) pull so we have one weeks. make sure string length correct for games
+		post users entries on EVM
+o		pull game results. 
+		pull from EVM and confirm winner and payour
+o		pull new week, open it to entry
+		repeat
+
+		each new week will have 10-16 games, so strings will be different
+
+in flight one, there is a pool of possibile policiea (very large)
+	a customer can make 3 or 4 or 1 polciies. that individual one gets approved
+	each policyID holds the customer, and the choices  they made
+	determine if you win or lose from outside results. many diff policies can win
+
+
+in football app, there is a pool of possible weeks to play (smaller)
+	a customer can make 1 or 2 or 3 entries in one week, or multi weeks
+	each entryID should hold the customer address, and the choices they made.
+	which would be the week as well as the string chosen
+
+
+week 01 //chosenWeek
+	entry 01 //choosen String
+		address 0x
+		string DEN05H
+	entry 02
+	entry 03
+week 02
+	entry 01
+	entry 02
+	entry 03
+
+only one week at a time can be bet on. 
+this way i can have every entry be calculated in correct order and not mixed
+weeks will take on same view as risk. cuz its an outside variable changing payout
+and it doesnt make WEEK super important. week just is one thing that can be won. the
+results are seperate from the entry. entry is how you get paid out. it checks if your
+entry won based on results from risk. one person gets paid. end. 
+
+
+
+
+
+
+
 
 
 GAMES
@@ -705,9 +825,6 @@ GAMES
 }
 
 
-
-i need to figure out how much of this I can do OFF the blockchain, off of solidity
-but can solidity do calculations, without costing the EVM
 
 
 */
