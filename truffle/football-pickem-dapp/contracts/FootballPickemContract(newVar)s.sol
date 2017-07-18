@@ -91,7 +91,10 @@ contract FootballPickemContract is usingOraclize {
 	}
 
 	//  secure an entry and call the oracle to place it in IPFS (is this what it acutally does lol? maybe note), and check games for payout monday night at 1am
-	enum oraclizeState {GetThursday, GetSunday, GetMonday}
+//	enum oraclizeState {GetThursday, GetSunday, GetMonday}
+
+	enum oraclizeState {GetHome, GetAway} //00 01
+
 
 	event LOG_entryApplied (
 		//entryID has week information too
@@ -216,11 +219,16 @@ contract FootballPickemContract is usingOraclize {
 	//for getting the game results ****THESE ARE SET TO LAST YEAR, SO I CAN TEST! FOR 2 WEEKS TILL PRESEASON
 	//string constant oracalizeDailyGamesURL = "[URL] json(https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/daily_game_schedule.json?fordate=)";
 
+
+/* not using this API anymore, for now
 	//these are bases. they start at the first week of the month. the function will find current week, and add week to there
 	string constant oracalizeBaseQueryThurs = "20160908"; //thursday 2016
 	string constant oracalizeBaseQuerySun = "20160911"; //sun 2016
-	string constant oracalizeBaseQueryMon = "20160912"; //monday 2016 + 1 weeks, etc. etc.
-	string constant oracalizeScoreBoardDaily = "[URL] json(ttps://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=)";
+	string constant oracalizeBaseQueryMon = "20160912"; //monday 2016 + 1 weeks, etc. etc.	string constant oracalizeScoreBoardDaily = "[URL] json(ttps://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=)";
+*/
+
+	string constant oracalizeOneGameApiHome = "[URL] json(http://api.sportradar.us/nfl-ot1/games/c8dc876a-099e-4e95-93dc-0eb143c6954f/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.home.points";
+	string constant oracalizeOneGameApiAway = "[URL] json(http://api.sportradar.us/nfl-ot1/games/c8dc876a-099e-4e95-93dc-0eb143c6954f/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.away.points";
 
 	//guess you wouldnt really have to encrypt this data across the internet.... *** I WILL ENCRYPY LATER. MVP
 //	string constant oraclizeGamesQueryEncrypted = "?${[decrypt] AFDSGDFDSGFSDFSDGSDGSDG and some other shit}"
@@ -232,8 +240,8 @@ contract FootballPickemContract is usingOraclize {
 
 
 	//new constant needed to record API. counter too
-	string apiResultsForCombining = "";
-	uint8 counterAPIDays = 0;
+	//string apiResultsForCombining = "";
+	//uint8 counterAPIDays = 0;
 
 	//
 
@@ -446,10 +454,10 @@ check who won. pay them out. download and open new week
 	//this is acutally putOnEVM. i do not use oracle here
 
 	function acceptUserEntry(uint _entryID) { //_entryID here is used to get all information from the entryID, so i dont have to pass a ton of data to here
-		entry instance = entries[_entryID]
+		entryInformation instance = entries[_entryID]
 
 
-
+		checkOneHomeGame();
 		//putOnEVM();
 
 		//logic to check if the actual entry is valid. this is not part of MVP so later
@@ -508,39 +516,43 @@ check who won. pay them out. download and open new week
 
 		//am going to do just one game, sundays, to make easy for now 
 		//week of payout is similar to policyID
-	function checkOneDayOfGames (uint _weekOfPayout){
-		uint currentWeekSunUnix = oracalizeBaseQuerySun + _weekOfPayout*(1 weeks);
+	function checkOneHomeGame (/*uint _weekOfPayout not needed. would need maybe game ID for this if i really wanted*/){
+		/*old API
+		uint currentWeekMonUnix = oracalizeBaseQueryMon + _weekOfPayout*(1 weeks);
 
-		string memory oraclize_url_sun = strConcat(oracalizeScoreBoardDaily, currentWeekSunUnix);		
-		bytes32 queryId = oraclize_query("nested", oraclize_url_sun, oraclizeGas);
-	
+		string memory oraclize_url_mon = strConcat(oracalizeScoreBoardDaily, currentWeekMonUnix);		
+		bytes32 queryId = oraclize_query("nested", oraclize_url_mon, oraclizeGas);
+	*/
+		string memory oraclize_url_home = oracalizeOneGameApiHome;
+		//string memory oraclize_url_away = oracalizeOneGameApiAway;
+		bytes32 queryId = oraclize_query("nested", oraclize_url_home, oraclizeGas);
+		//bytes32 queryId = oraclize_query("nested", oraclize_url_away, oraclizeGas);
+		
+
+
 	//dont get the negative here
 		bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance])- int(this.balance)));
+		oraclizeCallbacks[queryId] = oraclizeCallback(_weekOfPayout, oraclizeState.GetHome, _oraclizeTime);
 
-		LOG_OraclizeCall(_weekOfPayout, queryID, oraclize_url_sun);
+		LOG_OraclizeCall(_weekOfPayout, queryID, oraclize_url_mon);
+	}
+
+	function checkOneAwayGame (/*uint _weekOfPayout not needed. would need maybe game ID for this if i really wanted*/){
+
+		string memory oraclize_url_away = oracalizeOneGameApiAway;
+		bytes32 queryId = oraclize_query("nested", oraclize_url_away, oraclizeGas);
+		
+
+
+	//dont get the negative here
+		bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance])- int(this.balance)));
+		oraclizeCallbacks[queryId] = oraclizeCallback(_weekOfPayout, oraclizeState.GetAway, _oraclizeTime);
+
+		LOG_OraclizeCall(_weekOfPayout, queryID, oraclize_url_mon);
 	}
 
 
 
-
-/*		
-	SCORES
-
-		think you would ahve 15 strings DEN05H which is denver home team game, 5 points, if home team wins
-		parse into
-		string abbrev = 'DEN'
-		uint8 pointsToWin = 05;
-		string teamToWin = 'H'
-		uint8 totalPoints;
-		if(scoreboard.gamescore.game.homeTeam.Abbreviation === DEN ) {
-			if (teamToWin === 'H') {
-				if (scoreboard.gamescore.game.homeScore > scoreboard.gamescore.game.awayScore ) {
-					totalPoints += pointsToWin
-				}
-			} else if (scoreboard.gamescore.game.homeScore < scoreboard.gamescore.game.awayScore ) {
-				totalPoints += pointsToWin
-		}
-		*/
 	}
 
 	//o
@@ -555,6 +567,9 @@ check who won. pay them out. download and open new week
 		oraclizeCallback memory instance = oralcizeCallbacks[_queryId];
 		LOG_OraclizeCallback(instance.weekOfBetting, _queryId, _result, _proof); //weekOfBetting from week struct , part of oraclized callbacks mapping
 
+		if(instance.oState == oraclizeState.ForHome)	{
+			checkOneAwayGame()
+		} else {
 		//here we would have callbacks going for more dates. but not Today!
 
 		calculateWinner(/*instance.weekOfBetting*/_queryId, _result, _proof);
@@ -624,7 +639,7 @@ check who won. pay them out. download and open new week
 	}
 }*/
 
-
+//4dm7ds2degn9av2yp9ayqgtz
 
 	function calculateWinner () {
 		//parse the data from EVM.
@@ -642,6 +657,26 @@ check who won. pay them out. download and open new week
 
 		uint weekID = instance.weekOfBetting;
 		var sliceResult = _result.toSlice();
+
+
+		/*		
+	SCORES
+
+		think you would ahve 15 strings DEN05H which is denver home team game, 5 points, if home team wins
+		parse into
+		string abbrev = 'DEN'
+		uint8 pointsToWin = 05;
+		string teamToWin = 'H'
+		uint8 totalPoints;
+		if(scoreboard.gamescore.game.homeTeam.Abbreviation === DEN ) {
+			if (teamToWin === 'H') {
+				if (scoreboard.gamescore.game.homeScore > scoreboard.gamescore.game.awayScore ) {
+					totalPoints += pointsToWin
+				}
+			} else if (scoreboard.gamescore.game.homeScore < scoreboard.gamescore.game.awayScore ) {
+				totalPoints += pointsToWin
+		}
+		*/
 	}
 
 
