@@ -33,7 +33,7 @@ pragma solidity ^0.4.12;
 import "./github.com/oraclize/ethereum-api/oraclizeAPI.sol";
 import "https://raw.githubusercontent.com/Arachnid/solidity-stringutils/master/strings.sol";
 
-contract FootballPickemContract is usingOraclize {
+contract SingleGameContract is usingOraclize {
 
 	using strings for *; //what is this???????
 
@@ -97,11 +97,10 @@ contract FootballPickemContract is usingOraclize {
 
 
 	event LOG_entryApplied (
-		//entryID has week information too
+		//entryID has game information too
 		uint entryID, //first entry would be 1, 2. 
 		address user, //might be a duplicate vairalbe
-		string consolidatedBets, //this i want to be one long string that can be decrypted into the answer
-		//dont think i need the bet here, as all bets will be same. unless I have three differnt 
+		string homeOrAway, //H or A
 	);
 
 	event LOG_entryAccepted(
@@ -164,8 +163,6 @@ contract FootballPickemContract is usingOraclize {
 	//this would be the end of the 2017 season. lets make it 2017. i doubt the contract would not be updated 
 	uint contractDeadline;
 
-//might need to have a condition where if one person enters they dont lose any money
-	uint8 constant minimumEntries = 2;
 
 
 	//gas constant for oraclize. set at 500000 for now, might be changed
@@ -179,7 +176,6 @@ contract FootballPickemContract is usingOraclize {
 //accounting numbers
 	uint totalEntries;
 
-	//uint totalPayout = totalentries*betInEther; dont think i need this
 
 
 // account numbers for the internal ledger
@@ -201,63 +197,20 @@ contract FootballPickemContract is usingOraclize {
 	uint8 constant maintenance_BalTooHigh = 1;
 	uint8 constant maintenance_Emergency = 255;
 
-
-/*
-	API INFORMATION
-		Full game schedule, weeks 1 through 17. call to this once at the start of every Tuesday Morning
-			https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/full_game_schedule.json?
-		Thursday Night Games (week 1 2016)
-			https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/daily_game_schedule.json?fordate=20160908
-		Sunday Games (week 1 2016)
-			https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=20160911
-		Monday Games
-			https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=20160912
-
-			*/
-
-//urls and query strings for oraclize
-	//for getting the game results ****THESE ARE SET TO LAST YEAR, SO I CAN TEST! FOR 2 WEEKS TILL PRESEASON
-	//string constant oracalizeDailyGamesURL = "[URL] json(https://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/daily_game_schedule.json?fordate=)";
-
-
-/* not using this API anymore, for now
-	//these are bases. they start at the first week of the month. the function will find current week, and add week to there
-	string constant oracalizeBaseQueryThurs = "20160908"; //thursday 2016
-	string constant oracalizeBaseQuerySun = "20160911"; //sun 2016
-	string constant oracalizeBaseQueryMon = "20160912"; //monday 2016 + 1 weeks, etc. etc.	string constant oracalizeScoreBoardDaily = "[URL] json(ttps://api.mysportsfeeds.com/v1.1/sample/pull/nfl/2016-2017-regular/scoreboard.json?fordate=)";
-*/
-
-	string constant oracalizeOneGameApiHome = "[URL] json(http://api.sportradar.us/nfl-ot1/games/c8dc876a-099e-4e95-93dc-0eb143c6954f/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.home.points";
-	string constant oracalizeOneGameApiAway = "[URL] json(http://api.sportradar.us/nfl-ot1/games/c8dc876a-099e-4e95-93dc-0eb143c6954f/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.away.points";
-
-	//guess you wouldnt really have to encrypt this data across the internet.... *** I WILL ENCRYPY LATER. MVP
-//	string constant oraclizeGamesQueryEncrypted = "?${[decrypt] AFDSGDFDSGFSDFSDGSDGSDG and some other shit}"
-//?? do i need these?
-	//entry result. note that there will be multiple of these? or multiple calls into the contract. i don't know exactly how i am going to show that right now
-//	string constant entriesResults = "some results that are entered from the front end of the app. these need to be sent to oraclize, and then most likely stored on IPFS in a SAFE PLACE and encrypted so that no one knows what is uploaded. it should also be one line of text that gets decypted and solved. needs minimum storage"
-	//encrypted entry result
-//	string constant encryptentryResults;
-
-
-	//new constant needed to record API. counter too
-	//string apiResultsForCombining = "";
-	//uint8 counterAPIDays = 0;
-
-	//
+//api strings, hardcoded with a specific date
+	string constant oracalizeOneGameApiStart = "[URL] json(http://api.sportradar.us/nfl-ot1/games/";
+	string constant oracalizeOneGameApiHome = "/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.home.points";
+	string constant oracalizeOneGameApiAway = "/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.away.points";
 
 	struct entryInformation {
 		//unique public addresss of entry
 		address user;
-		//this should be a constant between each one
-		//uint amountWagered; nope, this is msg.value
-		//this will be based on how many people enter. really it can't be calculated until the first game is played. so it might not be in here at all. as there will be one state which pays out the whole policy
-	//	uint amountPayedOut
-
-		string combinedStringOfUserEntries; // 01 05 14 13 etc. 
-
-		uint etherSentByUser; //0.1, in finney?
-		//pointer to the week that is needed
-		bytes32 weekID;
+		//H or A
+		string chooseHomeOrAway; // 01 05 14 13 etc. 
+		//0.1, in finney?. yeah, 1000 finney is one ether
+		uint etherSentByUser;
+		//pointer to the game that is being bet on 
+		bytes32 gameID;
 		//status fields:
 		stateOfentry state;
 		// 7 - time of last state change
@@ -268,13 +221,15 @@ contract FootballPickemContract is usingOraclize {
 		bytes proof;
 	}
 
-	struct week {
+	struct game {
 
-		uint numberOfGames;
-		//uint lengthOfString; //dont know if i need, but i could do a check that a string is x long based on num of games. DEN05H is 6 letters. times 16 games. shouldbe be 96. etc
-		//string userChoicesString;
-		uint weekOfBetting; //01, 02, 03, 04, 05
-		//counter????
+		//the tag that allows for a specific game to be called. it is hardcoded for now
+		bytes32 gameAPITag;
+		//got from oracle and saved
+		uint8 homeScore;
+		//got from oracle and saved
+		uint8 awayScore;
+
 	}
 
 
@@ -283,7 +238,7 @@ contract FootballPickemContract is usingOraclize {
 
 		// for which entry have we called?
 		uint entryID;
-		// for which purpose did we call? {ForUploadData | ForPayout}
+		// for which purpose did we call? {GetHome | GetAway}
 		oraclizeState oState;
 		uint oraclizeTime;
 
@@ -294,11 +249,16 @@ contract FootballPickemContract is usingOraclize {
 
 	//table of everyone who has entered
 	entryInformation[] public entries;
+
 	//lookup entryIDs from entry public addresses. THIS MAKES SENSE NOW, CUZ ONE ADDRESS COULD HAVE AN EXPANDING UINT[] CUZ HE ENTERED MORE THAN ONCE, FOR ONE WEEK
 	mapping (address => uint[]) public entryIDs;
+	
 	//lookup entryIDs from queryIDs
 	mapping (bytes32 => oraclizeCallback) public oraclizeCallbacks;
-	mapping (uint8 => week) public weeks // this would be the weekly games if i decided to do it this way
+
+	//keeps track of how many GAMES have been initiated to be bet on
+	mapping (uint8 => game) public games;
+
 	//Internal ledger
 	int[5] public ledger;
 
@@ -345,7 +305,7 @@ contract FootballPickemContract is usingOraclize {
 	function getentryCount(address _user) constant returns (uint _count) {
 		return entries.length;
 
-	function getentryWeeklyCount(address _user) constant returns (uint _count) { //i guess the plane one sees how many entries one use has. this would see how many weeks one user has?
+	function getentryGameCount(address _user) constant returns (uint _count) { //i guess the plane one sees how many entries one use has. this would see how many weeks one user has?
 		return entryIDs[_user].length
 	}
 
@@ -377,14 +337,16 @@ contract FootballPickemContract is usingOraclize {
 		oraclize_setProof(proofType_TLSNotary | proofStorage_IPFS); //need to read oraclize contract to dig into this
 	}
 
-	//looks at users words that they put in, and determines if the entry is acceptable. if so it moves on to be uploaded to IPFS
-	function newEntry(string  _weekOfGames, string _combinedUserGameChoices, uint _startfirstGameOfWeek) notInMaintenance {
+	//
+	function newEntry(string  _gameTagFromApi, string _homeOrAway, uint _startTimeOfGame) notInMaintenance {
+		
+		uint _testingAugust2016 = 1470614400; //testing phase, to work with old games, the current games dont exist
 		uint _startOf2017Season = 1501702200; //august 2nd, 730pm 2017
 		uint _endOf2017Season = 1514808000; //january 1st, noon, 2018
 
 
 		//this logic is you are not allowed to enter
-		if (msg.value !== 0.1) {
+		if (msg.value !== 100 finney) {
 			LOG_entryDeclined(0, 'All entries must bet 0.1 ether');
 			if (!msg.sender.send(msg.value)){
 				LOG_SendFail(0, 'newEntry sending of EtherFailed (1)');
@@ -392,7 +354,7 @@ contract FootballPickemContract is usingOraclize {
 			return;
 		}
 
-		if (_startfirstGameOfWeek > now + 1 hours || _startfirstGameOfWeek < _startOf2017Season || _startfirstGameOfWeek > _endOf2017Season){
+		if (_startTimeOfGame > now + 1 hours || _startTimeOfGame < _testingAugust2016 || _startTimeOfGame > _endOf2017Season){
 			LOG_entryDeclined(0, 'Must be 2017 season and at least 1 hour before 1st game of week');
 			if (!msg.send.send(msg.value)) {
 				LOG_SendFail(0, 'newEntry sendback failed (2)');
@@ -400,19 +362,11 @@ contract FootballPickemContract is usingOraclize {
 			return; 
 		}
 
-		uint _currentWeek = Math.floor((now - _startOf2017Season) / 1 weeks) + 1;
+		//c8dc876a-099e-4e95-93dc-0eb143c6954f the tag
 
-//this is over confusing me, just continue. im sure i will spend hours on this later
-		if (_currentWeek !== _weekOfGames) {
-			LOG_entryDeclined(0, 'Must bet only during current week');
-			if (!msg.send.send(msg.value)) {
-				LOG_SendFail(0, 'newEntry sendback failed(3)');
-			}
-		}
+		bytes32  gameID = _gameTagFromApi
+		game gameMapping = games[gameID];
 
-
-		//the first guy to make an entry into the new week will cause this function to get called to get the week needed
-		if
 
 		//where entries is a struct with ~5 values 
 		uint entryID = entries.length++;//figure out entryID number based on previous ones that exist
@@ -421,13 +375,13 @@ contract FootballPickemContract is usingOraclize {
 
 		instance.user = msg.sender;
 		instance.etherSentByUser = getOperatingCostsAndRemainingPool();
-		instance.weekID = _weekOfGames;
-		instance.combinedStringOfUserEntries = _combinedUserGameChoices;
+		instance.gameID = gameID;
+		instance.chooseHomeOrAway = _homeOrAway;
 
 		instance.state = stateOfentry.Applied;
-		instance.stateMessage = "Weekly bet applied successfully by entry";
+		instance.stateMessage = "Game bet applied successfully by entry";
 		instance.stateTime = now;
-		LOG_entryApplied(entryID, msg.sender, _combinedUserGameChoices) //do i need to add weekly games to here
+		LOG_entryApplied(entryID, msg.sender, _homeOrAway) //do i need to add weekly games to here
 
 		//now youve entered, but we gotta see if you string is okay, then log entryAccepted
 		acceptUserEntry(entryID);
@@ -457,7 +411,7 @@ check who won. pay them out. download and open new week
 		entryInformation instance = entries[_entryID]
 
 
-		checkOneHomeGame();
+		checkOneHomeGame(_entryID, instance.gameID);
 		//putOnEVM();
 
 		//logic to check if the actual entry is valid. this is not part of MVP so later
@@ -471,173 +425,60 @@ check who won. pay them out. download and open new week
 
 	}
 
-//NOT USING, NOT ORACLE AT START
-	//o
-	//schedulePayoutOraclize
-	//this calls oraclize to upload to IPFS. 
-	/*
-	function putOnEVM () {
 
-		bytes32 queryID = oraclize_query(_oraclizeTime, 'nested', oraclize_url, oraclizeGas);
-		bookkeeping();
-		oraclizeCallbacks[queryId] = oraclizeCallback()
-	}*/
-
-	//o
-	//getFlightStats
-	//uses oraclize to call out to a football API. 
-
-
-	//week 15 has sat and thurs games. week 16 has just sat sun mon. week 17 has only sunday. whole preseason Is FUCKED2
-
-	/*
-	function checkThursGames (uint _weekOfPayout) {
-		//somehow need to trigger this based on time....
-		//***********i believe i could use orazclize to schedule a new query a week in the future! :):):)
-		//***count make it autonomous with always checking itself
-		uint currentWeekThursUnix = oracalizeBaseQueryThurs + _weekOfPayout*(1 weeks);
-		uint currentWeekSunUnix = oracalizeBaseQuerySun + _weekOfPayout*(1 weeks);
-		uint currentWeekMonUnix = oracalizeBaseQueryMon + _weekOfPayout*(1 weeks);
-
-//.scroeboard.gamescore if i wanted to get specific. but its no help
-
-//import solidity string 
-		if (counterAPIDays === 0) {
-			string memory oraclize_url_thurs = strConcat(oracalizeScoreBoardDaily, currentWeekThursUnix);		
-			bytes32 queryId = oraclize_query("nested", oraclize_url_thurs, oraclizeGas);
-		} else if (counterAPIDays === 1) {
-			string memory oraclize_url_sun = strConcat(oracalizeScoreBoardDaily, currentWeekSunUnix);		
-			bytes32 queryId = oraclize_query("nested", oraclize_url_sun, oraclizeGas);
-		} else (counterAPIDays === 2) {
-			string memory oraclize_url_mon = strConcat(oracalizeScoreBoardDaily, currentWeekMonUnix);		
-			bytes32 queryId = oraclize_query("nested", oraclize_url_mon, oraclizeGas);
-		}
-		*/
-
-		//am going to do just one game, sundays, to make easy for now 
 		//week of payout is similar to policyID
-	function checkOneHomeGame (/*uint _weekOfPayout not needed. would need maybe game ID for this if i really wanted*/){
-		/*old API
-		uint currentWeekMonUnix = oracalizeBaseQueryMon + _weekOfPayout*(1 weeks);
-
-		string memory oraclize_url_mon = strConcat(oracalizeScoreBoardDaily, currentWeekMonUnix);		
-		bytes32 queryId = oraclize_query("nested", oraclize_url_mon, oraclizeGas);
-	*/
-		string memory oraclize_url_home = oracalizeOneGameApiHome;
-		//string memory oraclize_url_away = oracalizeOneGameApiAway;
-		bytes32 queryId = oraclize_query("nested", oraclize_url_home, oraclizeGas);
-		//bytes32 queryId = oraclize_query("nested", oraclize_url_away, oraclizeGas);
+	function checkOneHomeGame (uint _entryID, bytes32 gameID){
 		
-
-
+		string memory oraclize_url_home = strConcat(oracalizeOneGameApiStart, gameID, oracalizeOneGameApiHome);
+		bytes32 queryId = oraclize_query("nested", oraclize_url_home, oraclizeGas);
+		
 	//dont get the negative here
 		bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance])- int(this.balance)));
-		oraclizeCallbacks[queryId] = oraclizeCallback(_weekOfPayout, oraclizeState.GetHome, _oraclizeTime);
+		oraclizeCallbacks[queryId] = oraclizeCallback(_entryID, oraclizeState.GetHome, _oraclizeTime);
 
-		LOG_OraclizeCall(_weekOfPayout, queryID, oraclize_url_mon);
+		LOG_OraclizeCall(_entryID, queryID, oraclize_url_home);
 	}
 
-	function checkOneAwayGame (/*uint _weekOfPayout not needed. would need maybe game ID for this if i really wanted*/){
+	function checkOneAwayGame (bytes32 _homeQueryID){
 
-		string memory oraclize_url_away = oracalizeOneGameApiAway;
+		string memory oraclize_url_away = strConcat(oracalizeOneGameApiStart, gameID, oracalizeOneGameApiAway);
 		bytes32 queryId = oraclize_query("nested", oraclize_url_away, oraclizeGas);
 		
-
-
 	//dont get the negative here
 		bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance])- int(this.balance)));
-		oraclizeCallbacks[queryId] = oraclizeCallback(_weekOfPayout, oraclizeState.GetAway, _oraclizeTime);
+		oraclizeCallbacks[queryId] = oraclizeCallback(_entryID, oraclizeState.GetAway, _oraclizeTime);
 
-		LOG_OraclizeCall(_weekOfPayout, queryID, oraclize_url_mon);
+		LOG_OraclizeCall(_entryID, queryID, oraclize_url_away);
 	}
 
 
 
 	}
 
-	//o
-	//same same
-	// this __callback only used after checkGames. needs to make sure all games were properly
-	//completed. if so, we go and let oraclize call IPFS to get users entries, and give them
-	//to the smart contract 
 	function __callBack (bytes32 _queryId, string _result, bytes _proof) onlyOraclize noRentry{
 	//	make sure the games are what we want, then call pullFromEVM
 	
 	//dont use a counter. use oraclzie state 
 		oraclizeCallback memory instance = oralcizeCallbacks[_queryId];
-		LOG_OraclizeCallback(instance.weekOfBetting, _queryId, _result, _proof); //weekOfBetting from week struct , part of oraclized callbacks mapping
+
+
+		/* i have the query ID, which two are linked to a single entry ID,
+		 which has a game chosen and home or away, 
+		 which is linked to the struct game, which has weather H or A won,
+		 which is gathered from the oracle calls, and their results */
+
+		//@@@@@@@@@@@@$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+		entrantInformation memory instanceTwo = instance.entryID
+
+		LOG_OraclizeCallback(instance.entryID, _queryId, _result, _proof); //weekOfBetting from week struct , part of oraclized callbacks mapping
 
 		if(instance.oState == oraclizeState.ForHome)	{
-			checkOneAwayGame()
+			checkOneAwayGame(instance.entryID)
 		} else {
-		//here we would have callbacks going for more dates. but not Today!
-
-		calculateWinner(/*instance.weekOfBetting*/_queryId, _result, _proof);
-
-
+			calculateWinner(/*instance.weekOfBetting*/_queryId, _result, _proof);
 	}
 
-
-	//payout
-	//pay the address that gets the most points
-
-/*
-{
-	scoreboard: {
-	lastUpdatedOn: "2017-06-19 10:06:20 AM",
-		gameScore: [
-			{
-			game: {
-				ID: "35171",
-				date: "2016-09-08",
-				time: "8:30PM",
-				awayTeam: {
-					ID: "69",
-					City: "Carolina",
-					Name: "Panthers",
-					Abbreviation: "CAR"
-				},
-				homeTeam: {
-					ID: "72",
-					City: "Denver",
-					Name: "Broncos",
-					Abbreviation: "DEN"
-				},
-				location: "Sports Authority Field"
-				},
-				isUnplayed: "false",
-				isInProgress: "false",
-				isCompleted: "true",
-				awayScore: "20",
-				homeScore: "21",
-				quarterSummary: {
-					quarter: [
-					{
-						@number: "1",
-						awayScore: "7",
-						homeScore: "0"
-					},
-					{
-						@number: "2",
-						awayScore: "10",
-						homeScore: "7"
-					},
-					{
-						@number: "3",
-						awayScore: "0",
-						homeScore: "0"
-					},
-					{
-						@number: "4",
-						awayScore: "3",
-						homeScore: "14"
-					}
-				]
-			}
-		}
-	]
-	}
-}*/
 
 //4dm7ds2degn9av2yp9ayqgtz
 
@@ -861,7 +702,5 @@ GAMES
 
 
 
-
-*/
 
 */
