@@ -1,33 +1,40 @@
 /*
-things i could add 
+SINGLE GAME APP
+
+Things I could Add
+- declined working
+- manual payout working
+
+Things I don't Get
+- oraclize proofs
+- maintenance, a bit
+- mutex - mutual exclusion 
+- _ on its own - IT REPRESENTS WHERE THE CODE WILL BE ENTERED
+- _variable - CLASS ATTRITUBES HAVE _ IN C++. IN JAVA THOUGH, YOU CAN USE this.variable. summary: underscore means this variable is unique to this function 
+- reentry guard - DAO hack - a reentry is an external call to a public function followe by another call to a funciton of the same contract before the first function finished execution
+
+******************************
+
+FULL FOOTBALL PICKEM POOL APP
+
+Things I could Add
+- Front end
+    dropdown menu so they can't screw up inserting values
+- DEN05H - simplest I have now
 - could have a decryptor on the front end that shows you what your picks are that goes back and forth
 - it would not be TOTALLY private unless we do hash them with the public key. but we could also have the user enter the public key so that he could still decyrpt on his own
-- the above seems like an extra thing to add, get the MVP first
 
 
-things i am not sure about
-- maybe i might end up having them actually uploading a string of numbers, seperated by sapces. "1 15 24 7 4 3 5" etc. no hiding. that could also be my MVP
-- how the oracalized proof works
-- how the maintenance stuff works
-- how will i upload the games? all at once already? 16 different games you can enter? this has to do with the risk stsruct
-- wtf is mutex and how do i use it
-- so an _ in front of a varialbe is distiigushing local function variables from global variables
-- how does reentry guard work and what does it do? i know i can find this on the internet
+Things I don't get
+- Seems like getting all 16 games might be best done with 16 different oracle calls. too expensive to parse?
 
-dsad
+
 */
-
-	/*what would be the easiest way to transmit user information? 
-	need to have a dropdown menu, with options 1-16 so the user cants screw it up
-	01-16 actually so i can split it up at intervals of 2
-	then i could sha3 it with the users account name and the sting of 
-	010405130406 etc etc. so overall the front end will take all of those numbers*/
-
 
 
 /*Created by David Kajpust - July 2017*/
 
-pragma solidity ^0.4.12;
+pragma solidity ^ 0.4.12;
 
 
 import "./github.com/oraclize/ethereum-api/oraclizeAPI.sol";
@@ -35,510 +42,519 @@ import "https://raw.githubusercontent.com/Arachnid/solidity-stringutils/master/s
 
 contract SingleGameContract is usingOraclize {
 
-	using strings for *; //what is this???????
+    using strings for *; //what is this???????
 
 
-	//modifiers
-
-	modifier noEther {if (msg.value > 0) throw; _ }
-	modifier onlyOwner {if (msg.sender != owner) throw; _}
-	modifier onlyOraclize {if (msg.sender != oraclize_cbAddress()) throw; _ }
-
-	//onlyinstate, onlycustomer,
-
-	modifier notInMaintenance {
-		healthCheck();
-		if (maintenance_mode >= maintenance_emergency) throw;
+    /*************************modifiers*********************************/
+    modifier noEther {if (msg.value > 0) throw; _ }
+    modifier onlyOwner {if (msg.sender != owner) throw; _ }
+    modifier onlyOraclize {if (msg.sender != oraclize_cbAddress()) throw; _ }
+	modifier onlyInState (uint _entryID, stateOfEntry _state) {
+		entryInformation instance = entries[_entryID];
+		if (instance.state != _state) throw;
+		_;
 	}
+    modifier notInMaintenance {
+        healthCheck();
+        if (maintenance_mode >= maintenance_emergency) throw;
+    }
+    modifier noRentry {
+        if (reentryGuard) throw;
+        reentryGuard = true;
+        _;
+        reentryGuard = false;
+    }
 
-	modifier noRentry {
-		if (reentryGuard) throw;
-		reentryGuard = true;
-		_
-		reentryGuard = false;
-	}
-
-	//enums
 	/*enums are one way to create a user defined type in Solidity. they are explicitly convertible to and from all integer types, but implicit convestion
 	is not allowed. the explicit converstions check the value ranges at runtime and a failure causes an exception. enums need at least one number*/
+    enum stateOfentry {Applied, Accepted, Winner, Loser, Declined, SendingFailure } //00 01 02 03 04 05
+    enum oraclizeState { GetHome, GetAway } //00 01
+
+
+    //events
+    event LOG_entryApplied (
+        uint entryID, //first entry would be 1, 2. links to gameID
+        address user, //might be a duplicate variable, if you bet on two diff games
+        string homeOrAway, //H or A
+    );
+    event LOG_entryAccepted(
+        uint entryID,
+    );
+    event LOG_entryWinner(
+        uint entryID,
+        uint amount
+    );
+    event LOG_entryLoser(
+        uint entryID
+    );
+    event LOG_entryDeclined(
+        uint entryID,
+        bytes32 reason
+    );
+    event LOG_entryManualPayout( //will need to add later
+        uint entryID,
+        bytes32 reason
+        //does this need uint amount? it doesnt in the other policy 
+    );
+    event LOG_SendFail(
+        uint entryID,
+        bytes32 reason
+    );
+    //oraclize events
+    event LOG_OraclizeCall(
+        uint entryID,
+        bytes32 queryId,//used to interact with oracle
+        string oraclize_url
+    );
+    event LOG_OraclizeCallback(
+        uint entryID,
+        bytes32 queryId,
+        string result, //what the oracle brings back
+        bytes proof //the proof thing which i dont undertand fully
+    );
+
+    //this is there to check if the amount of ether in the contract acutally lines up with what the payout is. 
+    event LOG_HealthCheck(
+        bytes32 message,
+        int diff,
+        uint balance,
+        int ledgerBalance 
+    );
+
+
+    /******************Constants*********************************************************************************************************************************/
+    //not used: contractdeadline, totalEntries
+
+    //general constants for the whole contract
+    uint constant betInEther = 0.1 ether; // should be like, 100 finney actually
+    //this would be the end of the 2017 season. lets make it 2017. i doubt the contract would not be updated 
+    uint contractDeadline;
+    //gas constant for oraclize. set at 500000 for now, might be changed
+    uint constant oraclizeGas = 500000;
+    //for the guy updating it
+    uint8 constant percentFeeForDapp = 1; //1%
+    //for any errors in calcs, so theres a fund on reserve to payout
+    uint8 constant percentFeeForErrors = 1; //1%
+    //a tally of how many people have entered
+    uint totalEntries;
+
+    // account numbers for the internal ledger
+
+    //sum of all entry fees from users. will be a multiple of entries entered
+    uint8 constant poolFund = 0;
+    //small reward fund that is kept in case some accounting errors happen and things needs to be rounded off
+    uint8 constant errorFund = 1;
+    //balance of the contract itself
+    uint8 constant contractBalance = 2;
+    //account to pay for updating the dapp code peridically 
+    uint8 constant updatingDappFund = 3;
+    // account holding ether to pay for oraclize calls
+    uint8 constant oracalizeFeesFund = 4;
+
+
+    //maintenance modes
+    uint8 constant maintenance_None = 0
+    uint8 constant maintenance_BalTooHigh = 1;
+    uint8 constant maintenance_Emergency = 255;
+
+    //api strings, hardcoded with a specific date
+    string constant oracalizeOneGameApiStart = "[URL] json(http://api.sportradar.us/nfl-ot1/games/";
+    string constant oracalizeOneGameApiHome = "/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.home.points";
+    string constant oracalizeOneGameApiAway = "/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.away.points";
+
+    struct entryInformation {
+        //unique public addresss of entry
+        address user;
+        //H or A
+        string chooseHomeOrAway;
+        //1000 finney is one ether
+        uint etherSentByUser;
+        //pointer to the game that is being bet on . it is same as the actual tag from the website
+        bytes32 gameID;
+        //status fields:
+        stateOfentry state;
+        // 7 - time of last state change
+        uint stateTime;
+        // 8 - state change message/reason
+        bytes32 stateMessage;
+        // 9 - TLSNotary Proof from oraclize
+        bytes proof;
+    }
+
+    //has the information about the game itself, and the results, which is enough information to determine winner or loser. 
+    struct game {
 
+        //the tag that allows for a specific game to be called. will need to be gathered from front end somehow. for testing in truffle it will be written in test
+        bytes32 gameAPITag;
+        //receive the score from oracle and saved. home score is called first, then away gets called right after, in a callback function
+        uint8 homeScore;
+        //receive from oracle and saved
+        uint8 awayScore;
 
-	// state of entry Codes and meaning:
-	//
-	// 00 = Applied:	the entry has payed a premium, but the oracle has
-	//					not yet checked and confirmed.
-	// 01 = Accepted:	the oracle has checked and confirmed. // i dont think this is happening. i am just posting something to ipfs, maybe oracale does it, maybe not
-
-	// 02 = Winner:		Their 16 games are the best choice of all. only one entry gets this
-	//					The oracle has checked and payed out.
-	// 03 = Loser:		Every other person is a loser
-	//					No payout.
-	// 04 = Declined:	The application was invalid. (UX/UI SHOULD BE DESIGNED TO REALLY PREVENT THIS)
-	//					The bet minus cancellation fee is payed back to the
-	//					customer by the oracle.
-	// 05 = SendFailed:	During Revoke, Decline or Payout, sending ether failed XXXXXXXXXX not sure how this works
-	//					for unknown reasons.
-	//					The funds remain in the contracts RiskFund.
-
-
-	enum stateOfentry { //these cab be labelled 00, 01, 02, 03, 04, 05, 06..... but do I need to do this?
-		Applied, 
-		Accepted,
-		Winner,
-		Loser, 
-		Declined,
-		SendingFailure
-	}
-
-	//  secure an entry and call the oracle to place it in IPFS (is this what it acutally does lol? maybe note), and check games for payout monday night at 1am
-//	enum oraclizeState {GetThursday, GetSunday, GetMonday}
-
-	enum oraclizeState {GetHome, GetAway} //00 01
-
-
-	event LOG_entryApplied (
-		//entryID has game information too
-		uint entryID, //first entry would be 1, 2. 
-		address user, //might be a duplicate vairalbe
-		string homeOrAway, //H or A
-	);
-
-	event LOG_entryAccepted(
-		uint entryID,
-		//uint statistics?
-
-	);
-	event LOG_entryWinner(
-		uint entryID,
-		uint amount
-	);
-	event LOG_entryLoser(
-		uint entryID
-	);
-	event LOG_entryDeclined(
-		uint entryID,
-		bytes32 reason
-	);
-	//this is only if I have to go back and fix it. also maybe add on to later? 
-	event LOG_entryManualPayout(
-		uint entryID,
-		bytes32 reason
-		//does this need uint amount? it doesnt in the other policy 
-	);
-	event LOG_SendFail(
-		uint entryID,
-		bytes32 reason
-	);
-
-
-	//oraclize events
-	event LOG_OraclizeCall(
-		uint entryID,
-		bytes32 queryId,//used to interact with oracle
-		string oraclize_url
-	);
-	event LOG_OraclizeCallback(
-		uint entryID,
-		bytes32 queryId,
-		string result, //what the oracle brings back. should be results of all games, winners and total losers
-		bytes proof //the proof thing which i dont undertand fully
-	);
-
-	//this is there to check if the amount of ether in the contract acutally lines up with what the payout is. 
-	event LOG_HealthCheck(
-		bytes32 message, 
-		int diff,
-		uint balance,
-		int ledgerBalance 
-	);
-
-
-	/******************Constants*********************/
-//general constants for the whole contract
-	uint constant betInEther = 0.1 ether; // should be like, 100 finney actually
-	//date that the contract ends. question for myself. Do i need to post a new contract each week? or can I have updated one ....
-
-
-
-	//this would be the end of the 2017 season. lets make it 2017. i doubt the contract would not be updated 
-	uint contractDeadline;
+    }
+
+    //this is created right when oraclize is actually called. from the internal function. this is used to relate data back and forth. not created in __Callback. used in __callback
+    struct oraclizeCallback {
 
-
-
-	//gas constant for oraclize. set at 500000 for now, might be changed
-	uint constant oraclizeGas = 500000;
-
-
-	uint8 constant percentFeeForDapp = 1; //1%
-
-	uint8 constant percentFeeForErrors = 1; //1%, for if anyting evey goes wrong, there is money on reserve
-
-//accounting numbers
-	uint totalEntries;
-
-
-
-// account numbers for the internal ledger
-	//sum of all entry fees from users. will be a multiple of entries entered
-	uint8 constant poolFund = 0;
-	//small reward fund that is kept in case some accounting errors happen and things needs to be rounded off
-	uint8 constant errorFund = 1;
-	//balance of the contract itself
-	uint8 constant contractBalance = 2;
-	//account to pay for updating the dapp code peridically 
-	uint8 constant updatingDappFund = 3;
-	// account holding ether to pay for oraclize calls
-	uint8 constant oracalizeFeesFund = 4;
-
-
-//maintenance modes
-	//will need some sort of indicator for maintenance, I think....
-	uint8 constant maintenance_None = 0
-	uint8 constant maintenance_BalTooHigh = 1;
-	uint8 constant maintenance_Emergency = 255;
-
-//api strings, hardcoded with a specific date
-	string constant oracalizeOneGameApiStart = "[URL] json(http://api.sportradar.us/nfl-ot1/games/";
-	string constant oracalizeOneGameApiHome = "/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.home.points";
-	string constant oracalizeOneGameApiAway = "/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.away.points";
-
-	struct entryInformation {
-		//unique public addresss of entry
-		address user;
-		//H or A
-		string chooseHomeOrAway; // 01 05 14 13 etc. 
-		//0.1, in finney?. yeah, 1000 finney is one ether
-		uint etherSentByUser;
-		//pointer to the game that is being bet on 
-		bytes32 gameID;
-		//status fields:
-		stateOfentry state;
-		// 7 - time of last state change
-		uint stateTime;
-		// 8 - state change message/reason
-		bytes32 stateMessage;
-		// 9 - TLSNotary Proof
-		bytes proof;
-	}
-
-	struct game {
-
-		//the tag that allows for a specific game to be called. it is hardcoded for now
-		bytes32 gameAPITag;
-		//got from oracle and saved
-		uint8 homeScore;
-		//got from oracle and saved
-		uint8 awayScore;
-
-	}
-
-
-
-	struct oraclizeCallback {
-
-		// for which entry have we called?
-		uint entryID;
-		// for which purpose did we call? {GetHome | GetAway}
-		oraclizeState oState;
-		uint oraclizeTime;
-
-	}
-
-//other variables, the ones that are interactive with the contract, based on how many people enter
-	address public owner; // guy who publishes contract (me)
-
-	//table of everyone who has entered
-	entryInformation[] public entries;
-
-	//lookup entryIDs from entry public addresses. THIS MAKES SENSE NOW, CUZ ONE ADDRESS COULD HAVE AN EXPANDING UINT[] CUZ HE ENTERED MORE THAN ONCE, FOR ONE WEEK
-	mapping (address => uint[]) public entryIDs;
-	
-	//lookup entryIDs from queryIDs
-	mapping (bytes32 => oraclizeCallback) public oraclizeCallbacks;
-
-	//keeps track of how many GAMES have been initiated to be bet on
-	mapping (uint8 => game) public games;
-
-	//Internal ledger
-	int[5] public ledger;
-
-	//Mutex
-	bool public reentryGuard;
-	uint8 public maintenance_mode;
-
-	function healthCheckContract() internal {
-		int diff = int(this.balance-msg.value) + ledger[contractBalance]
-		if (diff == 0){
-			return; // the amount being paid out and the contract amount are equal. nothing wrong with contract
-		}
-		if (diff > 0){
-			LOG_HealthCheck('Balance is too high', diff, this.balance, ledger[contractBalance]);
-			maintenance_mode = maintenance_BalTooHigh;
-		} else {
-			LOG_HealthCheck('Balance too low', diff, this.balance, ledger[contractBalance]);
-			maintenance_mode = maintenance_emergency;
-		}
-	}
-
-
-
-	function payWinner() onlyOwner {
-
-		if (!owner.send(this.balance)) throw; // i think this means if this gets called and we are not the owner trying to send the balance, throw it!
-		maintenance_mode = maintenance_Emergency; // don't accept any policies		
-
-	}
-
-	//update the internal ledger's 5 accounts
-	function bookKeeping(uint8 _from, uint8 _to, uint _amount) internal {
-		ledger[_from] -= int(_amount);
-		ledger[_to] += int(_amount);
-	}
-
-	//if ledger needs to be corrected, it can be by moving around erros funds or fees. or withdrawing update DApp fees
-	function audit(uint8 _from, uint8 _to, uint _amount) onlyOwner {
-
-		bookkeeping (_from, _to, _amount);
-
-	}
-
-	function getentryCount(address _user) constant returns (uint _count) {
-		return entries.length;
-
-	function getentryGameCount(address _user) constant returns (uint _count) { //i guess the plane one sees how many entries one use has. this would see how many weeks one user has?
-		return entryIDs[_user].length
-	}
-
-
-//the problem is for this each preimum is unique. mine is a whole pool. so it will have to be used differently
-	function getOperatingCostsAndRemainingPool() internal returns (uint) {
-
-		uint entryFee = msg.value;
-		uint updateDappFee = entryFee*percentFeeForDapp / 100;
-		uint errorFee = entryFee*percentFeeForErrors / 100;
-
-
-		bookKeeping(contractBalance, poolFund, entryFee);
-		bookKeeping(poolFund, updatingDappFund, updateDappFee);
-		bookKeeping(poolFund, errorFund, errorFee);
-
-		return (uint(entryFee - updateDappFee - errorFee));
-
-	}
-
-	//constructor
-	function FootballDapp () {
-		owner = msg.sender;
-		reentryGuard = false;
-		maintenance_mode = maintenance_None;
-
-		//initialze the contract by putting in the start that I want to have for an error fund for backup
-		bookkeeping(contractBalance, errorFund, msg.value);
-		oraclize_setProof(proofType_TLSNotary | proofStorage_IPFS); //need to read oraclize contract to dig into this
-	}
-
-	//
-	function newEntry(string  _gameTagFromApi, string _homeOrAway, uint _startTimeOfGame) notInMaintenance {
+        // for which entry have we called?
+        uint entryID;
+        // for which purpose did we call? {GetHome | GetAway}
+        oraclizeState oState;
+        uint oraclizeTime;
+        bytes32 oraclize_gameID;
+
+    }
+
+    //contract variables that are needed to navigate and connec the data from oracle and blockchain
+    // guy who publishes contract (me)
+    address public owner;
+    //table of everyone who has entered
+    entryInformation[] public entries;
+    //lookup entryIDs from entry public addresses. THIS MAKES SENSE NOW, CUZ ONE ADDRESS COULD HAVE AN EXPANDING UINT[] CUZ HE ENTERED MORE THAN ONCE, FOR ONE WEEK
+    mapping(address => uint[]) public entryIDs;
+    //lookup entryIDs from queryIDs
+    mapping(bytes32 => oraclizeCallback) public oraclizeCallbacks;
+    //keeps track of how many GAMES have been initiated to be bet on. NOT REALLY SURE IF THIS IS NEEDED?????????????????????
+    mapping(uint8 => game) public games;
+
+    //Internal ledger
+    int[5] public ledger;
+
+    //Mutex
+    bool public reentryGuard;
+    uint8 public maintenance_mode;
+
+
+/***************************************************************************FUNCTIONS**********************************************************************************/
+
+    function healthCheckContract() internal {
+        int diff = int(this.balance - msg.value) + ledger[contractBalance]
+        if (diff == 0) {
+            return; // the amount being paid out and the contract amount are equal. nothing wrong with contract
+        }
+        if (diff > 0) {
+            LOG_HealthCheck('Balance is too high', diff, this.balance, ledger[contractBalance]);
+            maintenance_mode = maintenance_BalTooHigh;
+        } else {
+            LOG_HealthCheck('Balance too low', diff, this.balance, ledger[contractBalance]);
+            maintenance_mode = maintenance_emergency;
+        }
+    }
+
+
+
+    function payWinner() onlyOwner {
+
+        if (!owner.send(this.balance)) throw; // i think this means if this gets called and we are not the owner trying to send the balance, throw it!
+        maintenance_mode = maintenance_Emergency; // don't accept any policies		
+
+    }
+
+    //update the internal ledger's 5 accounts
+    function bookKeeping(uint8 _from, uint8 _to, uint _amount) internal {
+        ledger[_from] -= int(_amount);
+        ledger[_to] += int(_amount);
+    }
+
+    //if ledger needs to be corrected, it can be by moving around erros funds or fees. or withdrawing update DApp fees
+    function audit(uint8 _from, uint8 _to, uint _amount) onlyOwner {
+
+        bookkeeping(_from, _to, _amount);
+
+    }
+
+    function getentryCount(address _user) constant returns (uint _count) {
+        return entries.length;
+
+        function getentryGameCount(address _user) constant returns (uint _count) { //i guess the plane one sees how many entries one use has. this would see how many weeks one user has?
+            return entryIDs[_user].length
+        }
+
+
+        //the problem is for this each preimum is unique. mine is a whole pool. so it will have to be used differently
+        function getOperatingCostsAndRemainingPool() internal returns (uint) {
+
+            uint entryFee = msg.value;
+            uint updateDappFee = entryFee * percentFeeForDapp / 100;
+            uint errorFee = entryFee * percentFeeForErrors / 100;
+
+
+            bookKeeping(contractBalance, poolFund, entryFee);
+            bookKeeping(poolFund, updatingDappFund, updateDappFee);
+            bookKeeping(poolFund, errorFund, errorFee);
+
+            return (uint(entryFee - updateDappFee - errorFee));
+
+        }
+
+        //constructor
+        function FootballDapp() {
+            owner = msg.sender;
+            reentryGuard = false;
+            maintenance_mode = maintenance_None;
+
+            //initialze the contract by putting in the start that I want to have for an error fund for backup
+            bookkeeping(contractBalance, errorFund, msg.value);
+            oraclize_setProof(proofType_TLSNotary | proofStorage_IPFS); //need to read oraclize contract to dig into this
+        }
+
+        //
+        function newEntry(string  _gameTagFromApi, string _homeOrAway, uint _startTimeOfGame) notInMaintenance {
 		
-		uint _testingAugust2016 = 1470614400; //testing phase, to work with old games, the current games dont exist
-		uint _startOf2017Season = 1501702200; //august 2nd, 730pm 2017
-		uint _endOf2017Season = 1514808000; //january 1st, noon, 2018
+            uint _testingAugust2016 = 1470614400; //testing phase, to work with old games, the current games dont exist
+            uint _startOf2017Season = 1501702200; //august 2nd, 730pm 2017
+            uint _endOf2017Season = 1514808000; //january 1st, noon, 2018
 
 
-		//this logic is you are not allowed to enter
-		if (msg.value !== 100 finney) {
-			LOG_entryDeclined(0, 'All entries must bet 0.1 ether');
-			if (!msg.sender.send(msg.value)){
-				LOG_SendFail(0, 'newEntry sending of EtherFailed (1)');
-			}
-			return;
-		}
+            //this logic is you are not allowed to enter
+            if (msg.value !== 100 finney) {
+                LOG_entryDeclined(0, 'All entries must bet 0.1 ether');
+                if (!msg.sender.send(msg.value)) {
+                    LOG_SendFail(0, 'newEntry sending of EtherFailed (1)');
+                }
+                return;
+            }
 
-		if (_startTimeOfGame > now + 1 hours || _startTimeOfGame < _testingAugust2016 || _startTimeOfGame > _endOf2017Season){
-			LOG_entryDeclined(0, 'Must be 2017 season and at least 1 hour before 1st game of week');
-			if (!msg.send.send(msg.value)) {
-				LOG_SendFail(0, 'newEntry sendback failed (2)');
-			}
-			return; 
-		}
+            if (_startTimeOfGame > now + 1 hours || _startTimeOfGame < _testingAugust2016 || _startTimeOfGame > _endOf2017Season){
+                LOG_entryDeclined(0, 'Must be 2017 season and at least 1 hour before 1st game of week');
+                if (!msg.send.send(msg.value)) {
+                    LOG_SendFail(0, 'newEntry sendback failed (2)');
+                }
+                return;
+            }
 
-		//c8dc876a-099e-4e95-93dc-0eb143c6954f the tag
+            //c8dc876a-099e-4e95-93dc-0eb143c6954f the tag
 
-		bytes32  gameID = _gameTagFromApi
-		game gameMapping = games[gameID];
-
-
-		//where entries is a struct with ~5 values 
-		uint entryID = entries.length++;//figure out entryID number based on previous ones that exist
-		entryIDs[msg.sender].push(entryID); //where entryIDs is a mapping of addresses to entryIDS for loookup
-		entryInformation instance = entries[entryID];
-
-		instance.user = msg.sender;
-		instance.etherSentByUser = getOperatingCostsAndRemainingPool();
-		instance.gameID = gameID;
-		instance.chooseHomeOrAway = _homeOrAway;
-
-		instance.state = stateOfentry.Applied;
-		instance.stateMessage = "Game bet applied successfully by entry";
-		instance.stateTime = now;
-		LOG_entryApplied(entryID, msg.sender, _homeOrAway) //do i need to add weekly games to here
-
-		//now youve entered, but we gotta see if you string is okay, then log entryAccepted
-		acceptUserEntry(entryID);
-
-	}
-
-/*it will already have the policy/week uploaded
-
-they need to get user entry, use oracle to get flight stats, then underwrite or payout
-which is where they check the results, and they might decline. if its a payout they call o
-oracle, , see if it worked, then run through payout
-
-i need to get user entires. check if week is uploaded. upload if it isnt
-check if user entry is correct. then upload to EVM
-
-then i need to keep doing that until time is triggered. i then i pull game data
-check who won. pay them out. download and open new week
-*/
-	function decline () {
-
-	}
-
-	//underwrite
-	//this is acutally putOnEVM. i do not use oracle here
-
-	function acceptUserEntry(uint _entryID) { //_entryID here is used to get all information from the entryID, so i dont have to pass a ton of data to here
-		entryInformation instance = entries[_entryID]
+            bytes32  gameID = _gameTagFromApi
+            game gameMapping = games[gameID];
 
 
-		checkOneHomeGame(_entryID, instance.gameID);
-		//putOnEVM();
+            //where entries is a struct with ~5 values 
+            uint entryID = entries.length++;//figure out entryID number based on previous ones that exist
+            entryIDs[msg.sender].push(entryID); //where entryIDs is a mapping of addresses to entryIDS for loookup
+            entryInformation instance = entries[entryID];
 
-		//logic to check if the actual entry is valid. this is not part of MVP so later
-		// 
+            instance.user = msg.sender;
+            instance.etherSentByUser = getOperatingCostsAndRemainingPool();
+            instance.gameID = gameID;
+            instance.chooseHomeOrAway = _homeOrAway;
 
-		LOG_entryAccepted(
-			_entryID
-		);
+            instance.state = stateOfentry.Applied;
+            instance.stateMessage = "Game bet applied successfully by entry";
+            instance.stateTime = now;
+            LOG_entryApplied(entryID, msg.sender, _homeOrAway) //do i need to add weekly games to here
+
+            //now youve entered, but we gotta see if you string is okay, then log entryAccepted
+            acceptUserEntry(entryID);
+
+        }
+
+        /*it will already have the policy/week uploaded
+        
+        they need to get user entry, use oracle to get flight stats, then underwrite or payout
+        which is where they check the results, and they might decline. if its a payout they call o
+        oracle, , see if it worked, then run through payout
+        
+        i need to get user entires. check if week is uploaded. upload if it isnt
+        check if user entry is correct. then upload to EVM
+        
+        then i need to keep doing that until time is triggered. i then i pull game data
+        check who won. pay them out. download and open new week
+        */
+
+        /* decline will BE ADDED IN AFTER. I wanna get the app to work before I try this
+        function decline() {
+
+        }
+        */
+        //underwrite
+        //this is acutally putOnEVM. i do not use oracle here
+
+        function acceptUserEntry(uint _entryID) { //_entryID here is used to get all information from the entryID, so i dont have to pass a ton of data to here
+            entryInformation instance = entries[_entryID]
 
 
+            checkOneHomeGame(_entryID, instance.gameID);
+            //putOnEVM();
 
-	}
+            //logic to check if the actual entry is valid. this is not part of MVP so later
+            // 
 
-
-		//week of payout is similar to policyID
-	function checkOneHomeGame (uint _entryID, bytes32 gameID){
-		
-		string memory oraclize_url_home = strConcat(oracalizeOneGameApiStart, gameID, oracalizeOneGameApiHome);
-		bytes32 queryId = oraclize_query("nested", oraclize_url_home, oraclizeGas);
-		
-	//dont get the negative here
-		bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance])- int(this.balance)));
-		oraclizeCallbacks[queryId] = oraclizeCallback(_entryID, oraclizeState.GetHome, _oraclizeTime);
-
-		LOG_OraclizeCall(_entryID, queryID, oraclize_url_home);
-	}
-
-	function checkOneAwayGame (bytes32 _homeQueryID){
-
-		string memory oraclize_url_away = strConcat(oracalizeOneGameApiStart, gameID, oracalizeOneGameApiAway);
-		bytes32 queryId = oraclize_query("nested", oraclize_url_away, oraclizeGas);
-		
-	//dont get the negative here
-		bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance])- int(this.balance)));
-		oraclizeCallbacks[queryId] = oraclizeCallback(_entryID, oraclizeState.GetAway, _oraclizeTime);
-
-		LOG_OraclizeCall(_entryID, queryID, oraclize_url_away);
-	}
+            LOG_entryAccepted(
+                _entryID
+            );
 
 
 
-	}
+        }
 
-	function __callBack (bytes32 _queryId, string _result, bytes _proof) onlyOraclize noRentry{
-	//	make sure the games are what we want, then call pullFromEVM
-	
-	//dont use a counter. use oraclzie state 
-		oraclizeCallback memory instance = oralcizeCallbacks[_queryId];
+
+        //week of payout is similar to policyID
+        function checkOneHomeGame(uint _entryID, bytes32 _gameID) {
+
+            string memory oraclize_url_home = strConcat(oracalizeOneGameApiStart, _gameID, oracalizeOneGameApiHome);
+            bytes32 queryId = oraclize_query("nested", oraclize_url_home, oraclizeGas);
+
+            //dont get the negative here
+            bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance]) - int(this.balance)));
+            oraclizeCallbacks[queryId] = oraclizeCallback(_entryID, oraclizeState.GetHome, _oraclizeTime, _gameID);
+
+
+            LOG_OraclizeCall(_entryID, queryID, oraclize_url_home);
+        }
+
+        function checkOneAwayGame(bytes32 _entryID, bytes32 _gameID) {
+
+            string memory oraclize_url_away = strConcat(oracalizeOneGameApiStart, gameID, oracalizeOneGameApiAway);
+            bytes32 queryId = oraclize_query("nested", oraclize_url_away, oraclizeGas);
+
+            //dont get the negative here
+            bookKeeping(oracalizeFeesFund, contractBalance, uint((-ledger[contractBalance]) - int(this.balance)));
+            oraclizeCallbacks[queryId] = oraclizeCallback(_entryID, oraclizeState.GetAway, _oraclizeTime);
+
+            LOG_OraclizeCall(_entryID, queryID, oraclize_url_away);
+        }
+
+
+
+    }
+
+    function __callBack(bytes32 _queryId, string _result, bytes _proof) onlyOraclize noRentry{
+        //	make sure the games are what we want, then call pullFromEVM
+
+        //dont use a counter. use oraclzie state 
+        oraclizeCallback memory instance = oralcizeCallbacks[_queryId];
+
+
 
 
 		/* i have the query ID, which two are linked to a single entry ID,
 		 which has a game chosen and home or away, 
 		 which is linked to the struct game, which has weather H or A won,
-		 which is gathered from the oracle calls, and their results */
-
-		//@@@@@@@@@@@@$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-
-		entrantInformation memory instanceTwo = instance.entryID
-
-		LOG_OraclizeCallback(instance.entryID, _queryId, _result, _proof); //weekOfBetting from week struct , part of oraclized callbacks mapping
-
-		if(instance.oState == oraclizeState.ForHome)	{
-			checkOneAwayGame(instance.entryID)
-		} else {
-			calculateWinner(/*instance.weekOfBetting*/_queryId, _result, _proof);
-	}
+		 which is gathered from the oracle calls, and their results.
+		 
+		 queryID && result ---> entryID ---> HorW && Struct Game ---> Scores/Winner
 
 
-//4dm7ds2degn9av2yp9ayqgtz
-
-	function calculateWinner () {
-		//parse the data from EVM.
-		//if you typed in the wrong value, your fault you dont get paid back for now. ie. dont worry about string length
-		//add up scores of each guy
-		//go to payout 
-	
-		// https://github.com/Arachnid/solidity-stringutils
-
-/*THIS IS GOING TO BE FUCKING HARD! BUT I CAN DO IT!. i am a solidity prodigy */
+		 you can look up struct oraclizeCallbacks to get entryID from QueryID
+		 you can look up the game struct with gameID in entry ID
+		  */
 
 
-		// figures out which week we are assessing who won
-		oraclizeCallback memory instance = oraclizeCallbacks[_queryID]
+        LOG_OraclizeCallback(instance.entryID, _queryId, _result, _proof); //weekOfBetting from week struct , part of oraclized callbacks mapping
 
-		uint weekID = instance.weekOfBetting;
-		var sliceResult = _result.toSlice();
-
-
-		/*		
-	SCORES
-
-		think you would ahve 15 strings DEN05H which is denver home team game, 5 points, if home team wins
-		parse into
-		string abbrev = 'DEN'
-		uint8 pointsToWin = 05;
-		string teamToWin = 'H'
-		uint8 totalPoints;
-		if(scoreboard.gamescore.game.homeTeam.Abbreviation === DEN ) {
-			if (teamToWin === 'H') {
-				if (scoreboard.gamescore.game.homeScore > scoreboard.gamescore.game.awayScore ) {
-					totalPoints += pointsToWin
-				}
-			} else if (scoreboard.gamescore.game.homeScore < scoreboard.gamescore.game.awayScore ) {
-				totalPoints += pointsToWin
-		}
-		*/
-	}
+        if (instance.oState == oraclizeState.ForHome) {
+            game saveHomeScoreInstance = games[instance.oraclize_gameID];
+            saveHomeScoreInstance.homeScore = _result;
+            checkOneAwayGame(instance.entryID, instance.oraclize_gameID);
+        } else {
+            game saveAwayScoreInstance = games[instance.oraclize_gameID];
+            saveAwayScoreInstance.awayScore = _result;
+            calculateWinner(instance.entryID, instance.oraclize_gameID);
+        }
 
 
-	//payout / 2
-	//most of calculating done in calculateWinner. this is just to seperate the functions
-	function payout () {
+        //4dm7ds2degn9av2yp9ayqgtz
+        //parse the data from EVM.
+        //if you typed in the wrong value, your fault you dont get paid back for now. ie. dont worry about string length
+        //add up scores of each guy
+        //go to payout 
+        // https://github.com/Arachnid/solidity-stringutils
+        /*THIS IS GOING TO BE FUCKING HARD! BUT I CAN DO IT!. i am a solidity prodigy */
 
-	}
+        //do i need anohter state of entry for applied? I think i might, our buddies did 
+        function calculateWinner(bytes32 _entryID, bytes32 _gameID) notInMaintenance onlyOraclize onlyInState(_entryID, stateOfentry.Accepted) internal {
 
-//fallback function: dont accept ether, except from owner
-function () onlyOwner {
-	//put additional funds into error fund
-	bookkeeping(contractBalance, errorFund, msg.value)
-}
+            game hasfinalScores = games[_gameid];
+            entryInformation instance = entries[_entryID]
+
+            //just realized you only pick H or A. It is calculating a 50/50 win right now.
+            //actually, however many people enter will determine wins and losses. 
+            //500 people enter. oakland has 4 to 1 odds. 400 should bet on okaload. 100 on den
+            // YEP. just gotta do some averages :) 
+            //OKAY I WILL DO THIS AFTERWORDs. FOR NOW JUST PAYOUT 1 GUY. I NEED TO GET THIS GOING
+
+            if (instance.chooseHomeOrAway === "H") {
+                if (hasfinalScores.homeScore > hasfinalScores.awayScore) {
+                    uint payout = instance.etherSentByUser * 2;
+
+                    ///dont have a max payout but i would have other stipulations
+
+                    if (payout > uint(-ledger[contractBalance])) {
+                        payout = uint(-ledger[contractBalance]);
+                    }
+
+                    //dont have this. seems they are transfersing money to a payout accountn
+                    //		bookkeeping(acc_Payout, acc_Balance, payout);      // cash out payout
+
+                    //still dont get how ! works 
+                    if (!instance.user.send(payout)) {
+                        instance.state = stateOfEntry.SendingFailed;
+                        instance.stateMessage = 'Payout, send failed!';
+                        instance.actualPayout = 0;
+                        LOG_SendFail(_policyId, 'payout sendfail');
+                    } else {
+                        instance.state = stateOfEntry.Winner;
+                        instance.stateMessage = 'Payout successful!';
+                        instance.stateTime = now; // won't be reverted in case of errors
+                        LOG_PolicyPaidOut(_entryID, payout);
+                    }
+                } else {
+                    instance.state = stateOfEntry.Loser;
+                    instance.stateMessage = "Your game lost!";
+                    instance.stateTime = now;
+                    LOG_Policy_entryLoser(_entryID);
+                }
+
+            } else {
+                if (hasfinalScores.homeScore < hasfinalScores.awayScore) {
+
+                    uint payout = instance.etherSentByUser * 2;
+
+                    ///dont have a max payout but i would have other stipulations
+
+                    if (payout > uint(-ledger[contractBalance])) {
+                        payout = uint(-ledger[contractBalance]);
+                    }
+
+                    //dont have this. seems they are transfersing money to a payout accountn
+                    //		bookkeeping(acc_Payout, acc_Balance, payout);      // cash out payout
+
+                    //still dont get how ! works 
+                    if (!instance.user.send(payout)) {
+                        instance.state = stateOfEntry.SendingFailed;
+                        instance.stateMessage = 'Payout, send failed!';
+                        instance.actualPayout = 0;
+                        LOG_SendFail(_policyId, 'payout sendfail');
+                    } else {
+                        instance.state = stateOfEntry.Winner;
+                        instance.stateMessage = 'Payout successful!';
+                        instance.stateTime = now; // won't be reverted in case of errors
+                        LOG_PolicyPaidOut(_entryID, payout);
+                    }
+                } else {
+                    instance.state = stateOfEntry.Loser;
+                    instance.stateMessage = "Your game lost!";
+                    instance.stateTime = now;
+                    LOG_Policy_entryLoser(_entryID);
+                }
+
+            }
+        }
+
+
+        //fallback function: dont accept ether, except from owner
+        function () onlyOwner {
+            //put additional funds into error fund
+            bookkeeping(contractBalance, errorFund, msg.value)
+        }
 
 
 
 
 
 
-}
+    }
 
 
 /*

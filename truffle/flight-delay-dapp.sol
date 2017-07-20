@@ -271,6 +271,7 @@ contract FlightDelay is usingOraclize {
 	mapping (address => uint[]) public customerPolicies;
 	// Lookup policy Ids from queryIds
 	mapping (bytes32 => oraclizeCallback) public oraclizeCallbacks;
+	//lookup policy ids from riskIDs
 	mapping (bytes32 => risk) public risks;
 	// Internal ledger
 	int[6] public ledger; //this is a fixed array of 6 ints
