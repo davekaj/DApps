@@ -123,7 +123,7 @@ contract SingleGameContract is usingOraclize {
     uint8 constant maintenance_Emergency = 255;
 
     //api strings, hardcoded with a specific date
-    string constant oraclizeOneGameApiStart = "[URL] json(http://api.sportradar.us/nfl-ot1/games/";
+    string constant oraclizeOneGameApiStart = "json(http://api.sportradar.us/nfl-ot1/games/";
     string constant oraclizeOneGameApiHome = "/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.home.points";
     string constant oraclizeOneGameApiAway = "/boxscore.json?api_key=4dm7ds2degn9av2yp9ayqgtz).summary.away.points";
 
@@ -190,6 +190,8 @@ contract SingleGameContract is usingOraclize {
     uint8 public maintenance_mode;
 
 
+
+
 /***************************************************************************FUNCTIONS**********************************************************************************/
 
     function healthCheckContract() internal {
@@ -250,18 +252,19 @@ contract SingleGameContract is usingOraclize {
     }
 
     //constructor
-    function SingleGameContract() {
+    function SingleGameContract() payable {
         owner = msg.sender;
         reentryGuard = false;
         maintenance_mode = maintenance_None;
 
         //initialze the contract by putting in the start that I want to have for an error fund for backup
         bookKeeping(contractBalance, errorFund, msg.value);
-        oraclize_setProof(proofType_TLSNotary | proofStorage_IPFS); //need to read oraclize contract to dig into this
+       // oraclize_setProof(proofType_TLSNotary | proofStorage_IPFS); //need to read oraclize contract to dig into this THIS IS MAKING CONTRACT FAIL, GREENED IT OUT
     }
 
+    //1470614500 testing this just so it passes
     //c8dc876a-099e-4e95-93dc-0eb143c6954f the tag of the game we are inspecting. seattle 12, miami 10 
-    function newEntry(bytes32  _gameTagFromApi, string _homeOrAway, uint _startTimeOfGame) notInMaintenance {
+    function newEntry(bytes32  _gameTagFromApi, string _homeOrAway, uint _startTimeOfGame) notInMaintenance payable {
     
         uint _testingAugust2016 = 1470614400; //testing phase, to work with old games, the current games dont exist
         uint _startOf2017Season = 1501702200; //august 2nd, 730pm 2017
@@ -325,7 +328,7 @@ contract SingleGameContract is usingOraclize {
     function checkOneHomeGame(uint _entryID, bytes32 _gameID) {
         string memory _tempFixGameID = "c8dc876a-099e-4e95-93dc-0eb143c6954f"; // needed because compiler wont let me use a string instead of bytes32, which is needed for strConcat from oracle contract
         string memory oraclize_url_home = strConcat(oraclizeOneGameApiStart, _tempFixGameID, oraclizeOneGameApiHome);
-        bytes32 queryID = oraclize_query("nested", oraclize_url_home, oraclizeGas);
+        bytes32 queryID = oraclize_query("URL", oraclize_url_home, oraclizeGas);
         uint _oraclizeTime = now;
 
         //dont get the negative here
