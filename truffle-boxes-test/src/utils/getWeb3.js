@@ -36,3 +36,26 @@ let getWeb3 = new Promise(function(resolve, reject) {
 })
 
 export default getWeb3
+
+/*davids notes
+
+import web3, just getting the node module to be used here
+
+wait for the window to load. 
+check for web 3
+
+resolve it , or wait for the promise to complete. 
+
+export getWeb3. so now the WEB3 object with all its beautiful functions is in there baby!
+
+or else, do not get web 3. FROM META MASK or such, and connect to locatl host
+
+hopefully you are running 8545 in the background
+
+eitehr way web3 gets exported, and you should have it connected to a blockchain. that is it
+
+now think of web3 as a library, like blubird etc. it helps you work with the blockchain. learn it
+
+
+
+*/

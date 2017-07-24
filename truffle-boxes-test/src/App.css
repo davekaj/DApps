@@ -66,3 +66,21 @@ code {
   height: 16px;
   margin-right: 10px;
 }
+
+
+
+img {
+  width: 50%;
+}
+
+.test-border {
+  border: 2px black solid;
+  border-radius: 5px;
+  padding: 5px;
+  margin: 10px;
+}
+
+.bigger-text {
+  font-size: 20px;
+  font-weight: bold;
+}
