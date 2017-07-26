@@ -46,7 +46,11 @@ class App extends Component {
       web3: null,
       yourAccount: "Could not connect to metamask",
       yourBalance: "same as above",
-      nonce: 0
+      nonce: 0,
+      friend: "",
+      amount: 0,
+      gasPrice: 0,
+      gasLimit: 0
     }
   }
 
@@ -62,13 +66,9 @@ class App extends Component {
         })
 
         // Instantiate contract once web3 provided.
-        this.instantiateContract()
+        this.instantiateContract();
         this.getUserAccountAndBalance();
-        let nonce = this.getNonce();
-        console.log(nonce);
-        this.setState({
-          nonce: nonce
-        })
+        this.getNonce(results.web3)
       })
       .catch(() => {
         console.log('Error finding web3.')
@@ -102,54 +102,68 @@ class App extends Component {
     })
   }
 
-  //a raw transactin is a transaction that is in raw buyes
-  sendTransactionToFriend(friendsAccount, ether, gasPrice, gasLimit, nonce) {
-    return (dispatch) => {
+  //a raw transactin is a transaction that is in raw bytes
+  sendTransactionToFriend(e) {
+   // return (dispatch) => { DONT WANT THIS. THIS RETURNS A FUNCTION. SO NOTHING ACTUALLY EVER GETS CALCULATED
+      e.preventDefault();
       let web3 = this.state.web3;
       let user = web3.eth.accounts[0];
-      let wei = Math.pow(10, 18);
-      let etherToWei = ether * wei;
-      let gasPriceWei = gasPrice * Math.pow(10, 9);
+      let etherToWei = this.state.amount * Math.pow(10, 18);
+      let gasPriceGwei = parseFloat(this.state.gasPrice * Math.pow(10, 9));
+
+      let numGasLimit = parseFloat(this.state.gasLimit);
 
       let rawTx = {
-        nonce: `Ox${nonce.toString(16)}`,
-        gasPrice: `Ox${gasPriceWei.toString(16)}`,
-        gasLimit: `Ox${gasLimit.toString(16)}`,
+        nonce: `0x${this.state.nonce.toString(16)}`,
+        gasPrice: `0x${gasPriceGwei.toString(16)}`,
+        gasLimit: `0x${numGasLimit.toString(16)}`,
         from: user,
-        to: friendsAccount,
-        value: `Ox${etherToWei.toString(16)}`
+        to: this.state.friend,
+        value: `0x${etherToWei.toString(16)}`
       };
       console.log('raw txn:', rawTx);
       web3.eth.sendTransaction(rawTx, (err, txHash) => {
         if (err) { console.log('Error sending txm:', err); }
       })
-    }
+  //  }
   }
 
 
 
-  getNonce() {
-    let web3 = this.state.web3;
+  getNonce(web3) {
     let user = web3.eth.accounts[0];
-    console.log(user);
-    let nonce = web3.eth.getTransactionCount(user, (err, nonce) => {
+    // console.log(user);
+    web3.eth.getTransactionCount(user, (err, nonce) => {
       if (err) { console.log('Error getting nonce', err); }
+      this.setState({
+        nonce: nonce
+      })
+      console.log(this.state.nonce);
+      return nonce;
     });
-    console.log(nonce);
-    return nonce;
+
   }
 
-  /*
-    getNonce() {
-      return (dispatch) => {
-        let web3 = this.state.web3;
-        let user = web3.eth.accounts[0];
-        web3.eth.getTransactionCount(user, (err, nonce) => {
-          if (err) { console.log('Error getting nonce', err); }
-        });
-      }
+
+  updateStatefromForm(e) {
+    if (e.target.name == "friend") {
+      this.setState({
+        friend: e.target.value
+      })
+    } else if (e.target.name == "sendAmount") {
+      this.setState({
+        amount: e.target.value
+      })
+    } else if (e.target.name == "gasToSend") {
+      this.setState({
+        gasPrice: e.target.value
+      })
+    } else {
+      this.setState({
+        gasLimit: e.target.value
+      })
     }
-  */
+  }
 
 
   instantiateContract() {
@@ -209,10 +223,11 @@ class App extends Component {
               <div>Your Balance: {this.state.yourBalance}</div>
               <br /><div className="bigger-text">Fill in the form below to send a transaction </div><br />
               <form>
-                <div>Friends Account 	&nbsp;: <input type="text" name="friend" placeholder="Friends account" /></div>
-                <div>Amount to Send	 : <input type="text" name="sendAmount" placeholder="Amount to Send in Ether" /> </div>
-                <div>Gas to Send 	&nbsp;	&nbsp;	&nbsp;	&nbsp;   : <input type="text" name="gasToSend" placeholder="Gas" /> </div>
-                <div>Gwei per gas 	&nbsp;	&nbsp;	&nbsp;  : <input type="text" name="gweiToSend" placeholder="Gwei" /></div>
+                <div>Friends Account 	&nbsp;: <input type="text" name="friend" placeholder="Friends account" onChange={this.updateStatefromForm.bind(this)} /></div>
+                <div>Amount to Send	 : <input type="text" name="sendAmount" placeholder="Amount to Send in Ether" onChange={this.updateStatefromForm.bind(this)} /> </div>
+                <div>Gwei per gas 	&nbsp;	&nbsp;	&nbsp;   : <input type="number" name="gasToSend" placeholder="Gas" onChange={this.updateStatefromForm.bind(this)} /> </div>
+                <div>Enter Gas Limit 	&nbsp;  : <input type="number" name="gasLimit" placeholder="Gwei" onChange={this.updateStatefromForm.bind(this)} /></div><br />
+                <div><button type="submit" className="btn btn-primary" onClick={this.sendTransactionToFriend.bind(this)}>Send Transaction</button></div>
               </form>
             </div>
             <div className="ether-image col-xs-5 test-border text-center">
@@ -226,3 +241,6 @@ class App extends Component {
 }
 
 export default App
+
+
+//NEED TO SET DEFUALT OF THE BUTTON TO NOT AUTO RELOAD!!!!!!!!!!!!!
