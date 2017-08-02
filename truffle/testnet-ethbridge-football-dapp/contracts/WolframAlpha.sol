@@ -13,10 +13,10 @@ import "usingOraclize.sol"
 
 contract WolframAlpha is usingOraclize {
     
-    string public temperature;
+    string public twoPlusTwo;
     
     event newOraclizeQuery(string description);
-    event newTemperatureMeasure(string temperature);
+    event newAnswer(string answer);
 
     function WolframAlpha() payable {
         update();
@@ -24,14 +24,18 @@ contract WolframAlpha is usingOraclize {
     
     function __callback(bytes32 myid, string result) {
         if (msg.sender != oraclize_cbAddress()) throw;
-        temperature = result;
-        newTemperatureMeasure(temperature);
+        answer = result;
+        newTemperatureMeasure(answer);
         // do something with the temperature measure..
     }
     
     function update() payable {
         newOraclizeQuery("Oraclize query was sent, standing by for the answer..");
-        oraclize_query("WolframAlpha", "temperature in London");
+        oraclize_query("WolframAlpha", "two plus two");
+    }
+
+    function getAnswer () returns (string) {
+        return twoPlusTwo;
     }
     
 } 

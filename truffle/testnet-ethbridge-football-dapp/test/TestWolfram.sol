@@ -2,18 +2,18 @@ pragma solidity ^0.4.2;
 
 import "truffle/Assert.sol";
 import "truffle/DeployedAddresses.sol";
-import "../contracts/MetaCoin.sol";
+import "../contracts/WolframAlpha.sol";
 
-contract TestMetacoin {
+contract TestWolfram {
 
-  function testInitialBalanceUsingDeployedContract() {
-    MetaCoin meta = MetaCoin(DeployedAddresses.MetaCoin());
+  function testTwoPlusTwo() {
+    Wolfram wa = WolframAlpha(DeployedAddresses.WolframAlpha());
 
-    uint expected = 10000;
+    uint expected = 4;
 
-    Assert.equal(meta.getBalance(tx.origin), expected, "Owner should have 10000 MetaCoin initially");
+    Assert.equal(wa.getAnswer(tx.origin), expected, "Owner should have 10000 MetaCoin initially");
   }
-
+/*
   function testInitialBalanceWithNewMetaCoin() {
     MetaCoin meta = new MetaCoin();
 
@@ -23,3 +23,4 @@ contract TestMetacoin {
   }
 
 }
+*/
