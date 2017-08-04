@@ -1,31 +1,25 @@
 pragma solidity ^0.4.0;
 
-import "usingOraclize.sol"
-
-
-/*
-   WolframAlpha example
-
-   This contract sends a temperature measure request to WolframAlpha
-*/
-
+import "usingOraclize.sol";
 
 
 contract WolframAlpha is usingOraclize {
-    
     string public twoPlusTwo;
+    uint public TEST = 4;
+
     
     event newOraclizeQuery(string description);
     event newAnswer(string answer);
 
     function WolframAlpha() payable {
+        OAR = OraclizeAddrResolverI(0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475); //would have to remove while it is in testing 
         update();
     }
     
     function __callback(bytes32 myid, string result) {
-        if (msg.sender != oraclize_cbAddress()) throw;
-        answer = result;
-        newTemperatureMeasure(answer);
+        if (msg.sender != oraclize_cbAddress()) revert();
+        twoPlusTwo = result;
+        newAnswer(twoPlusTwo);
         // do something with the temperature measure..
     }
     
@@ -34,9 +28,16 @@ contract WolframAlpha is usingOraclize {
         oraclize_query("WolframAlpha", "two plus two");
     }
 
-    function getAnswer () returns (string) {
-        return twoPlusTwo;
+    function getAnswer () returns (uint) {
+        return TEST;
+    }
+
+    function getOraclizeAnswer() returns (bytes32) {
+        return sha3(twoPlusTwo);
     }
     
+    function getOraclizeAnswerJS() returns (string) {
+        return twoPlusTwo;
+    }
 } 
                                            
