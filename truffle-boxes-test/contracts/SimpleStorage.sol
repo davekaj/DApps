@@ -433,3 +433,64 @@ contract PatreonFactory {
 
 
 
+/*
+new bugs
+it appears that oneTimecontribution only works once, and then the contract balance resets
+unless this.balance represents just the function, and not the actual contract balance
+
+NO WAIT, it has a balance of 1 but then transfers 1 to the creators account. cool. it works
+*/
+
+
+
+/*
+
+Story script for first explaination of a dApp
+
+Patreon Factory
+- this is your common factory for making something over and over again which is a common coding practice. lets break it down
+- create contract takes a name, which is the name of your contract
+- it ends up returning the new contract address, the name of it (bytes32 because thats the only way contracts can interact), the uint of the contract, and the address of the person who called it
+- what the fucntion does. 
+    it created a contract, increases the length of newContracts 
+    it saves the address that created this contract with a push into a dynamic array
+    then it creates a new contract, passing the two values it needs to that contract function
+    two more pushes to save newContract and name
+    then we LOG both address (this may be gone)
+
+- thats about it. it also has three getter functions for convience sakes (i only know of one that is used right now)d
+
+
+Single Patreon Contract
+- The ledger
+    the ledger is needed in order to record values that people have donated, who has donated, and what has
+    been done with the donations over time. These numbers are stricly ledger numbers, and dont represent real ether
+    but they have to be used to be able to transfer ether, and update the ledgers. if the ledger gets fucked up
+    ether wont get sent around properly 
+    - need to explain why its [13]
+
+- struct donationData
+    this holds donators address, donations remaining and starting
+
+- [] donators
+    a dynamic array of the struct above
+
+- mapping patreonIDs
+    mapping realting eth address to the patreon ID
+
+-function SinglePAtreon (constructor)
+    just gives the contract a name, a number, and creators address (through use of getter function from factory)
+
+-function SetOneTimecontribution)
+    a funciton only the creator can call, which allows them to determine how much a one time donor can give to them. 1$, 10$, .1 ether. customizable
+    
+
+
+
+
+
+
+
+
+
+*/
