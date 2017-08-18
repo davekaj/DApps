@@ -1,14 +1,20 @@
 // simple rock paper scissors game on ethereum in a very naive implementation, just to showcase some basic features of Solidity
 
-pragma solidity ^0.4.13;
+pragma solidity ^0.4.15;
 
-contract Rps {
+contract RockPaperScissors {
+    
+    //A string that maps to a string that maps to an int
     mapping (string => mapping(string => int)) payoffMatrix;
+    
     address player1;
     address player2;
+    
+    //State variables for players choice or rock, paper, or scissors (has a vulnerability)
     string public player1Choice;
     string public player2Choice;
 
+    //Just there to prevent one player from registering twice
     modifier notRegisteredYet()
     {
         if (msg.sender == player1 || msg.sender == player2)
@@ -17,6 +23,7 @@ contract Rps {
             _;
     }
     
+    //To ensure that a certain amount of ether is sent with the transaction
     modifier sentEnoughCash(uint amount)
     {
         if (msg.value < amount)
@@ -25,7 +32,9 @@ contract Rps {
             _;
     }
     
-    function Rps() {   // constructor
+    
+    //constructor function
+    function RockPaperScissors() {
         payoffMatrix["rock"]["rock"] = 0;
         payoffMatrix["rock"]["paper"] = 2;
         payoffMatrix["rock"]["scissors"] = 1;
@@ -37,9 +46,8 @@ contract Rps {
         payoffMatrix["scissors"]["scissors"] = 0;
     }
     
-    function getWinner() constant returns (int x) {
-        return payoffMatrix[player1Choice][player2Choice];
-    }
+    
+
     
     function play(string choice) returns (int w) {
         if (msg.sender == player1)
@@ -68,19 +76,24 @@ contract Rps {
             return -1;
     }
     
-// HELPER FUNCTIONS (not required for game)
-
-    function getMyBalance () constant returns (uint amount) {
-        return msg.sender.balance;
-    }
     
+
+//Getter Functions - only used to get values from the smart contract, not used for actual game play
+
+
     function getContractBalance () constant returns (uint amount) {
         return this.balance;
     }
     
+    function getWinner() constant returns (int x) {
+        return payoffMatrix[player1Choice][player2Choice];
+    }
+    
+    
     function register()
-        sentEnoughCash(5)
+        sentEnoughCash(5 ether)
         notRegisteredYet()
+        payable 
     {
         if (player1 == 0)
             player1 = msg.sender;
@@ -88,26 +101,17 @@ contract Rps {
             player2 = msg.sender;
     }
     
-    function amIPlayer1() constant returns (bool x) {
+    function checkIfPlayer1() constant returns (bool x) {
         return msg.sender == player1;
     }
     
-    function amIPlayer2() constant returns (bool x) {
+    function checkIfPlayer2() constant returns (bool x) {
         return msg.sender == player2;
     }
 
-    function returnPlayer1() constant returns (address x) {
-        return player1;
-    }
-
-    function returnPlayer2() constant returns (address x) {
-        return player2;
-    }
     
     function checkBothNotNull() constant returns (bool x) {
         return (bytes(player1Choice).length == 0 && bytes(player2Choice).length == 0);
     }
-
-// \HELPER FUNCTIONS
 
 }
