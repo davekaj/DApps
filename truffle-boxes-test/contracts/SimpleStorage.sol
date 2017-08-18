@@ -484,10 +484,44 @@ Single Patreon Contract
 -function SetOneTimecontribution)
     a funciton only the creator can call, which allows them to determine how much a one time donor can give to them. 1$, 10$, .1 ether. customizable
     
+-function oneTimeContribution() 
+    just straight up trasfers the money to creaotr address. 
+    logs it to show it happens
+    increases the number of single contributions 
 
+-function setMonthlyContribution ()
 
+-function monthlyContribution ()
+    elaborate way to prevent duplicate monthly contributions
+    make a patreonID
+    set the patreonIDs mapping to match address to patreon ID
+    save donationData struct in memory and name if pd
+        this part is weird and round about but figure out why it is all done at once instead of 5 seperate
+    just update ledger
 
+-function patreonCancleMonthly()
+    make sure correct patreonID is grabbed form address
+    block the thing from 0 address
+    revert if already 0
+    figure out moths removed
+    update full ledger
+    then send refund (always do after)
 
+-function checkIfPAtreonsAreDoneDonating ()
+    inetnal function to know when to stop taking a donation for the next month
+    called from creatorWithdrawMonthly
+
+-function creatorWithdrawMonthly
+    uses time to figure out when the first of each month will be
+    needs to dunamically change it with a lot of logic
+    this could be a seperate contract
+    figures out amount to withdraw (right now a constant eth amount and a variable donator amount)
+    update ledger
+    check if anyones done
+    update ledger
+    transfer
+
+    then a big if funciton to figure out which month it is, so it knows the unix time for the next release
 
 
 
