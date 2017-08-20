@@ -5,6 +5,8 @@
 /node_modules
 /api/node_modules
 
+#fix this
+
 # testing
 /coverage
 
