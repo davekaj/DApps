@@ -1,0 +1,7 @@
+this is a send ther direct to friend app i was trying to build
+
+super simple way to send eth
+
+realized i didnt need a smart contract at all for it, pretty much just needed front end web3 to interact with an eth node 
+
+i think all i did was code the app.js. cuz it appears everything else was still simple storage 

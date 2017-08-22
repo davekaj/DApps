@@ -1,4 +1,4 @@
-pragma solidity ^0.4.12;
+pragma solidity ^0.4.13;
 
 
 //would be nice to have a UI that will actually show on www.blockchainpatreon.com the countdown till they can withdraw money :)
@@ -90,8 +90,17 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
     uint constant monthlyDonation = 12; // 0.083, but do i need this constant? 
     
     
-    modifier onlyCreator {if (msg.sender != creator) revert(); _; }
-    modifier onlyPatreons {if (msg.sender == creator) revert(); _;}
+    modifier onlyCreator {
+        if (msg.sender != creator) 
+            revert();
+         _; 
+    }
+
+    modifier onlyPatreons {
+        if (msg.sender == creator)
+            revert(); 
+        _;
+    }
     
     event LOG_SingleDonation (uint donationAmount, address donator);
     event LOG_Withdraw (uint emptyBalance);
@@ -389,7 +398,7 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
   }
 */
 
-  function ()  {} //fallback function. dont accept ether to this contract without calling the constructor function or others. this way, people dont accidentally burn their money
+  function () {} //fallback function. dont accept ether to this contract without calling the constructor function or others. this way, people dont accidentally burn their money
 
 
 }
@@ -434,12 +443,7 @@ contract PatreonFactory {
 
 
 /*
-new bugs
-it appears that oneTimecontribution only works once, and then the contract balance resets
-unless this.balance represents just the function, and not the actual contract balance
 
-NO WAIT, it has a balance of 1 but then transfers 1 to the creators account. cool. it works
-*/
 
 
 

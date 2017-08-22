@@ -1,5 +1,5 @@
 import React, { Component } from 'react'
-import SimpleStorageContract from '../build/contracts/SimpleStorage.json'
+import PatreonContract from '../build/contracts/PatreonFactory.json'
 import getWeb3 from './utils/getWeb3'
 
 import './css/oswald.css'
@@ -7,164 +7,33 @@ import './css/open-sans.css'
 import './css/pure-min.css'
 import './App.css'
 
-/*
-
-beatutiful. web3. is a state within the react app. this makes it so simple to call any of its functions. 
-
-instantiate contract is a custom made function. it is caled within component will mount 
-
-why isnt this motherfucker binding stuff!
-
-how does it just require truffle contract? 
-
-they take contract() which must be from truffle contract, and apply it to SimpleStorageContract
-
-then they set that contract to a provided, which we get from the web3 state
-
-deployed() deals with delpoying the contracts. this is a truffle thing too . note this is all truffle which doesnt seem like react 
-
-
-simple storage .get and .set ARE CONTRACT FUNCTIONS! believe that 
-
-so far, in dealing with my contracts, i have not seen them in jaavscript files. I have tested them with mocha inside of a truffle framework, and i have also debugged them with Remix on 
-the web browser. but this is where web3 comes in. web3 is what links blockchain actions to js. BUT TRUFFLE comes with web3, so i have been ysing it hen i was running tests with it. all is good
-
-the metamask example for metapay is simply just all web3 and javascript interacting with metamast directly. there is no contract at all. which makes me realize that no contract is needed
-to do what i want to do. but oh well we will make it. because i am learning how to write contracts. not just do REACT AND JS
-
- */
-
-
-
-
 class App extends Component {
   constructor(props) {
     super(props)
 
     this.state = {
       storageValue: 0,
-      web3: null,
-      yourAccount: "Could not connect to metamask",
-      yourBalance: "same as above",
-      nonce: 0,
-      friend: "",
-      amount: 0,
-      gasPrice: 0,
-      gasLimit: 0
+      web3: null
     }
   }
-
 
   componentWillMount() {
     // Get network provider and web3 instance.
     // See utils/getWeb3 for more info.
 
     getWeb3
-      .then(results => {
-        this.setState({
-          web3: results.web3,
-        })
-
-        // Instantiate contract once web3 provided.
-        this.instantiateContract();
-        this.getUserAccountAndBalance();
-        this.getNonce(results.web3)
+    .then(results => {
+      this.setState({
+        web3: results.web3
       })
-      .catch(() => {
-        console.log('Error finding web3.')
-      })
-  }
 
-
-  getUserAccountAndBalance() {
-    var account;
-    var accountBalance;
-
-    this.state.web3.eth.getAccounts((error, accounts) => {
-      account = accounts[0];
-
-      accountBalance = this.state.web3.eth.getBalance(account, (error, result) => {
-        if (!error) {
-          console.log(result)
-          var goodNum = result.c[0] / (10000);
-          var goodNumToString = goodNum.toString() + " ether";
-          console.log(typeof (goodNum));
-          this.setState({
-            yourAccount: account,
-            yourBalance: goodNumToString
-          })
-        }
-        else {
-          console.log(error);
-        }
-
-      })
+      // Instantiate contract once web3 provided.
+      this.instantiateContract()
+    })
+    .catch(() => {
+      console.log('Error finding web3.')
     })
   }
-
-  //a raw transactin is a transaction that is in raw bytes
-  sendTransactionToFriend(e) {
-   // return (dispatch) => { DONT WANT THIS. THIS RETURNS A FUNCTION. SO NOTHING ACTUALLY EVER GETS CALCULATED
-      e.preventDefault();
-      let web3 = this.state.web3;
-      let user = web3.eth.accounts[0];
-      let etherToWei = this.state.amount * Math.pow(10, 18);
-      let gasPriceGwei = parseFloat(this.state.gasPrice * Math.pow(10, 9));
-
-      let numGasLimit = parseFloat(this.state.gasLimit);
-
-      let rawTx = {
-        nonce: `0x${this.state.nonce.toString(16)}`,
-        gasPrice: `0x${gasPriceGwei.toString(16)}`,
-        gasLimit: `0x${numGasLimit.toString(16)}`,
-        from: user,
-        to: this.state.friend,
-        value: `0x${etherToWei.toString(16)}`
-      };
-      console.log('raw txn:', rawTx);
-      web3.eth.sendTransaction(rawTx, (err, txHash) => {
-        if (err) { console.log('Error sending txm:', err); }
-      })
-  //  }
-  }
-
-
-
-  getNonce(web3) {
-    let user = web3.eth.accounts[0];
-    // console.log(user);
-    web3.eth.getTransactionCount(user, (err, nonce) => {
-      if (err) { console.log('Error getting nonce', err); }
-      this.setState({
-        nonce: nonce
-      })
-      console.log(this.state.nonce);
-      return nonce;
-    });
-
-  }
-
-
-  updateStatefromForm(e) {
-    if (e.target.name == "friend") {
-      this.setState({
-        friend: e.target.value
-      })
-    } else if (e.target.name == "sendAmount") {
-      this.setState({
-        amount: e.target.value
-      })
-    } else if (e.target.name == "gasToSend") {
-      this.setState({
-        gasPrice: e.target.value
-      })
-    } else {
-      this.setState({
-        gasLimit: e.target.value
-      })
-    }
-  }
-
 
   instantiateContract() {
     /*
@@ -174,26 +43,25 @@ class App extends Component {
      * state management library, but for convenience I've placed them here.
      */
 
-    const contract = require('truffle-contract') // oh okay this is just like import, i get it, but this would normally be a a JS file for state management (a library)
-    const simpleStorage = contract(SimpleStorageContract)
-    simpleStorage.setProvider(this.state.web3.currentProvider)
+    const contract = require('truffle-contract')
+    const patreon = contract(PatreonContract)
+    patreon.setProvider(this.state.web3.currentProvider)
 
     // Declaring this for later so we can chain functions on SimpleStorage.
-    var simpleStorageInstance
+    var patreonInstance
 
     // Get accounts.
     this.state.web3.eth.getAccounts((error, accounts) => {
-      simpleStorage.deployed().then((instance) => {
-        simpleStorageInstance = instance
+      patreon.deployed().then((instance) => {
+        patreonInstance = instance
 
         // Stores a given value, 5 by default.
-        return simpleStorageInstance.set(5, { from: accounts[0] })
+        return patreonInstance.set(5, {from: accounts[0]})
       }).then((result) => {
         // Get the value from the contract to prove it worked.
-        return simpleStorageInstance.get.call(accounts[0])
+        return patreonInstance.get.call(accounts[0])
       }).then((result) => {
         // Update state with the result.
-        console.log(result);
         return this.setState({ storageValue: result.c[0] })
       })
     })
@@ -201,46 +69,26 @@ class App extends Component {
 
   render() {
     return (
-      <div className="App" >
+      <div className="App">
         <nav className="navbar pure-menu pure-menu-horizontal">
-          <a href="#" className="pure-menu-heading pure-menu-link">Send Ether to a Friend</a>
+            <a href="#" className="pure-menu-heading pure-menu-link">Truffle Box</a>
         </nav>
 
-        <main className="container col-xs-12">
-          <div className="full-page">
-            <div className="title-and-description test-border">
-              <h1 className="text-center">Send Ether Directly to a Friend</h1>
-              <p>This Simple UX/UI of this website will let you easily send ether to a friend. Watch out for fishing websites.  </p>
-              <h2>What does the smart contract actually do?</h2>
-              <p>It connects to whichever site you are connected through with metamask, if you are on the normal web, or whatever mist is connected to. See below all the contract code:</p>
-              <p>[INSERT CODE HERE, MAKE IT LOOK LIKE CODE HOW THEY DO ONLINE]</p>
-              <p>Also I might try to get gas costs and estimated time based on gwei if i Can!</p>
+        <main className="container">
+          <div className="pure-g">
+            <div className="pure-u-1-1">
+              <h1>Good to Go!</h1>
+              <p>Your Truffle Box is installed and ready.</p>
+              <h2>Smart Contract Example</h2>
+              <p>If your contracts compiled and migrated successfully, below will show a stored value of 5 (by default).</p>
+              <p>Try changing the value stored on <strong>line 59</strong> of App.js.</p>
               <p>The stored value is: {this.state.storageValue}</p>
-            </div>
-            <div className="send-Ether-App col-xs-6 test-border">
-              <div className="bigger-text">If your account connects properly, you will see your account and balance below</div><br />
-              <div>Your Account: {this.state.yourAccount}</div>
-              <div>Your Balance: {this.state.yourBalance}</div>
-              <br /><div className="bigger-text">Fill in the form below to send a transaction </div><br />
-              <form>
-                <div>Friends Account 	&nbsp;: <input type="text" name="friend" placeholder="Friends account" onChange={this.updateStatefromForm.bind(this)} /></div>
-                <div>Amount to Send	 : <input type="text" name="sendAmount" placeholder="Amount to Send in Ether" onChange={this.updateStatefromForm.bind(this)} /> </div>
-                <div>Gwei per gas 	&nbsp;	&nbsp;	&nbsp;   : <input type="number" name="gasToSend" placeholder="Gas" onChange={this.updateStatefromForm.bind(this)} /> </div>
-                <div>Enter Gas Limit 	&nbsp;  : <input type="number" name="gasLimit" placeholder="Gwei" onChange={this.updateStatefromForm.bind(this)} /></div><br />
-                <div><button type="submit" className="btn btn-primary" onClick={this.sendTransactionToFriend.bind(this)}>Send Transaction</button></div>
-              </form>
-            </div>
-            <div className="ether-image col-xs-5 test-border text-center">
-              <img src="https://www.cryptodiggers.eu/eshop/image/data/ethereum.png" />
             </div>
           </div>
         </main>
-      </div >
+      </div>
     );
   }
 }
 
 export default App
-
-
-//NEED TO SET DEFUALT OF THE BUTTON TO NOT AUTO RELOAD!!!!!!!!!!!!!
