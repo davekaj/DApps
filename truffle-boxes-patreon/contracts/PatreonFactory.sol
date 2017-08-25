@@ -59,7 +59,7 @@ does not have 10% fees!
 
 contract SinglePatreon { //should make this only callable by Patreon Factory 
     bytes32 public name;
-    uint public singleDonationAmount; //i think it is 0 automatically, we will see
+    uint public singleDonationAmount;
     uint public monthlyDonationAmount;
     address public creator;
     uint contractNumber;
@@ -92,8 +92,16 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
     uint constant monthlyDonation = 12; // 0.083, but do i need this constant? 
     
     
-    modifier onlyCreator {if (msg.sender != creator) revert(); _; }
-    modifier onlyPatreons {if (msg.sender == creator) revert(); _;}
+    modifier onlyCreator {
+        if (msg.sender != creator) 
+            revert();
+        _; 
+    }
+    modifier onlyPatreons {
+        if (msg.sender == creator) 
+            revert();
+        _;
+    }
     
     event LOG_SingleDonation (uint donationAmount, address donator);
     event LOG_Withdraw (uint emptyBalance);
@@ -132,13 +140,14 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
 
     }
 
-    function setOneTimeContribution(uint setAmountInWei) onlyCreator  returns(uint){
+    function setOneTimeContribution(uint setAmountInWei) onlyCreator  returns(uint) {
         singleDonationAmount = setAmountInWei;
         return singleDonationAmount;
     }
     
     function oneTimeContribution() payable onlyPatreons {
-        if (msg.value != singleDonationAmount) revert(); 
+        if (msg.value != singleDonationAmount) 
+            revert(); 
         
         LOG_ContractBalance(this.balance);
         creator.transfer(msg.value);
@@ -154,16 +163,17 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
     }
 
 
-
+    // it appears that this returns function returns nothings
     //the only place where ledger has permanent things added
     function monthlyContribution() payable onlyPatreons returns(uint) {
         
-        if (msg.value != monthlyDonationAmount) revert();
+        if (msg.value != monthlyDonationAmount) 
+            revert();
         
         
         //to ensure that no one makes a double contribution, if it != 0, throw, unless you are the very first one. because all will be 0 if they haven't been created yet
         //also donators.length is needed since donators[0] doesnt exist at the start. it has to be first in the logic, otherwise fail
-        if((donators.length >= 1) && (patreonIDs[msg.sender] != 0 || donators[0].donator == msg.sender)){
+        if((donators.length >= 1) && (patreonIDs[msg.sender] != 0 || donators[0].donator == msg.sender)) {
             revert();
             }
         
@@ -182,6 +192,8 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
     //MAYBE THIS IS CHEAPER THOUGH. i make 5 memorys and one storage change, vs. 5 storage changes     
         
         
+        //is it possible that ether could be sent, and this ledger would not get filled out cuz failure, and then person would effectively lose their 1 year contribution? if so, bad!
+
         ledger[monthlyDonation] = pd.paymentPerMonth; //right now 0.083. but it could be changed, if i let users pick months. but it gets more difficult. MVP
         
         ledger[allPatreonsEver] += 1;
@@ -204,7 +216,7 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
         uint patreonID = patreonIDs[msg.sender];
         
         //this is needed because any msg.sender that has not been created could otherwise steal the first donators cash in here
-        if (patreonID == 0 && (msg.sender != donators[0].donator)){
+        if (patreonID == 0 && (msg.sender != donators[0].donator)) {
             revert();
         }
         
@@ -213,7 +225,8 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
         
         
        
-        if (refund == 0) revert();
+        if (refund == 0)
+            revert();
        
         uint monthsRemoved = donators[patreonID].monthsRemaining;
        
@@ -250,7 +263,7 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
             donators[x].totalRemaining -= donators[x].paymentPerMonth;
             donators[x].monthsRemaining -= 1;
             
-            if (donators[x].monthsRemaining == 0){
+            if (donators[x].monthsRemaining == 0) {
                 patreonsDone++;
             }
         }
@@ -262,6 +275,8 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
         
     }
     
+
+
     //ledger here has things moved from being completed
     function creatorWithdrawMonthly() onlyCreator { //right now people only contribute for a 12 month term. I GUESS the user 
         
@@ -303,7 +318,7 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
 
             
             //change dynamicFirstOfMonth, with math. then increment 
-            if (monthlyCounter == 7 || monthlyCounter ==  9 || monthlyCounter == 11 || monthlyCounter == 0 || monthlyCounter == 2 || monthlyCounter == 4 || monthlyCounter == 6){
+            if (monthlyCounter == 7 || monthlyCounter == 9 || monthlyCounter == 11 || monthlyCounter == 0 || monthlyCounter == 2 || monthlyCounter == 4 || monthlyCounter == 6) {
                 dynamicFirstOfMonth += secondsInOneMonth31;
                 
                 if (monthlyCounter == 11) {
@@ -316,7 +331,7 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
                 dynamicFirstOfMonth += secondsInOneMonth30;
                 monthlyCounter++;
             } else {
-                if (now > leapYearCounter){
+                if (now > leapYearCounter) {
                     dynamicFirstOfMonth = dynamicFirstOfMonth + secondsInOneMonth29;
                     leapYearCounter += leapYearCycle;
                      monthlyCounter++;
@@ -335,25 +350,28 @@ contract SinglePatreon { //should make this only callable by Patreon Factory
 
 /*********************************************Helper Functions (or functions that are general to many contracts**************************************************************************/
 
-/*
 
-  function getTotalDonations() {
-      
+
+  function getOneTimecontribution() constant returns(uint singleDonation) {
+    return singleDonationAmount;
+  }
+
+//gets the monthly donation amount entered by contract owner
+  function getMonthlyDonationAmount() constant returns (uint monthlyDonation) {
+    return  monthlyDonationAmount;
+  }
+
+//maybe not needed, contract balanace should suffice ?
+  function getMonthsLeftForDonation() constant returns (uint monthsLeft) {
+      return ledger[monthlyDonationsAvailable];
+  }
+
+  function getContractBalance()  constant returns(uint contractBalance) {
+      return this.balance;
   }
 
 
-  function getMonthlyDonations() {
-      
-  }
-
-
-
-  function getContractBalance() {
-      
-  }
-*/
-
-  function ()  {} //fallback function. dont accept ether to this contract without calling the constructor function or others. this way, people dont accidentally burn their money
+  function () {} //fallback function. dont accept ether to this contract without calling the constructor function or others. this way, people dont accidentally burn their money
 
 
 }
@@ -369,7 +387,7 @@ contract PatreonFactory {
     
     address factoryAddress = this;
     
-    event LOG_NewContractAddress (address theNewcontract, address theContractCreator);
+    event LOG_NewContractAddress (address theNewcontract, address indexed theContractCreator);
 
     function createContract (bytes32 name) returns(address, bytes32, uint, address) {
         uint contractNumber = newContracts.length;
@@ -384,7 +402,7 @@ contract PatreonFactory {
     function getName(uint i) constant returns(bytes32 contractName) {
         return names[i];
     }
-    function getcontractAddressAtIndex(uint i) constant returns(address contractAddress) {
+    function getContractAddressAtIndex(uint i) constant returns(address contractAddress) {
         return newContracts[i];
     }
     
@@ -392,7 +410,17 @@ contract PatreonFactory {
         return originalCreators[i];
     }
 
-            //junk		
+    function getNameArray() constant returns(bytes32[] contractName) {
+        return names;
+    }
+    function getContractAddressArray() constant returns(address[] contractAddress) {
+        return newContracts;
+    }
+    
+    function getOriginalCreatorArray() constant returns (address[] originalCreator) {
+        return originalCreators;
+    }
+                //junk		
     uint storedData;		
     function set(uint x) {		
         storedData = x;		
@@ -400,6 +428,7 @@ contract PatreonFactory {
     function get() constant returns (uint) {		
         return storedData;		
     }	
+
 
 
 }
