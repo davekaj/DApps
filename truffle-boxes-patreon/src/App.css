@@ -7,32 +7,20 @@ body,
 
 h1, h2, h3 {
   font-family: 'Oswald', 'Arial Narrow', sans-serif;
-}
-
-code {
-  display: block;
-  margin: 20px 0 15px 0;
-  padding: 10px;
-  background: #eee;
+  
 }
 
 .container {
   box-sizing: border-box;
   width: 100%;
   padding: 45px 20px;
+  text-align: center;
 }
 
-.pure-button-primary {
-  background-color: #0c1a2b;
+body {
+  background-color: 	lightblue;
 }
 
-.pure-button-primary:hover {
-  background-color: #233e5e;
-}
-
-.pure-form input[type="text"]:focus {
-  border-color: #0c1a2b;
-}
 
 /* NAVBAR */
 
@@ -41,6 +29,8 @@ code {
   padding: 5px;
   background: #0c1a2b;
   font-family: 'Oswald', 'Arial Narrow', sans-serif;
+  text-align: center;
+  z-index: 100;
 }
 
 .navbar a {
@@ -58,29 +48,27 @@ code {
   text-transform: none;
 }
 
-.navbar .navbar-right {
-  float: right;
-}
-
-.navbar .uport-logo {
-  height: 16px;
-  margin-right: 10px;
-}
+/* END NAVBAR */
 
 
+/* MY STUFF */
 
-img {
-  width: 50%;
-}
+
 
 .test-border {
-  border: 2px black solid;
-  border-radius: 5px;
+  border: 4px black solid;
+  border-radius: 10px;
   padding: 5px;
   margin: 10px;
+  float: none;
+  margin: 0 auto;
 }
 
 .bigger-text {
   font-size: 20px;
   font-weight: bold;
+}
+
+input {
+  font-size: 10px;
 }

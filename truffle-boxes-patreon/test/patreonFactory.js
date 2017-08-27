@@ -1,19 +1,25 @@
-var SimpleStorage = artifacts.require("./PatreonFactory.sol");
+var PatreonFactory = artifacts.require("./PatreonFactory.sol");
 
 contract('PatreonFactory', function(accounts) {
 
 
-  /*
-  it("...should store the value 89.", function() {
-    return SimpleStorage.deployed().then(function(instance) {
-      simpleStorageInstance = instance;
+  
+  it(`Contract creator is correctly ${accounts[0]}`, function() {
+    return PatreonFactory.deployed().then(function(instance) {
+      patreonFactoryInstance = instance;
 
-      return simpleStorageInstance.set(89, {from: accounts[0]});
+      return patreonFactoryInstance.createContract("Contract 1", {from: accounts[0]});
     }).then(function() {
-      return simpleStorageInstance.get.call();
-    }).then(function(storedData) {
-      assert.equal(storedData, 89, "The value 89 was not stored.");
+      return patreonFactoryInstance.getOriginalCreator.call(0);
+    }).then(function(creator) {
+      assert.equal(creator, accounts[0], "The contract wasn't created");
     });
   });
-*/
+
+
+
+
+
+
+
 });

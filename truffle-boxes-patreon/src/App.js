@@ -25,6 +25,7 @@ class App extends React.Component {
       web3: null,
       contractPickedByDonator: "",
       contractName: "",
+      childVisible: false,
     }
 
     this.onInput = this.onInput.bind(this);
@@ -65,7 +66,6 @@ class App extends React.Component {
         return patreonInstance.createContract(this.state.contractName, { from: accounts[0] })
       }).then((result) => {
         console.log(result);// note that this returns a general block tx, recipt, and logs array. does NOT return what solidity function returns
-
         //code to do an EVENT WATCH. Need more of these
         var event = patreonInstance.LOG_NewContractAddress()
         event.watch(function (error, result) {
@@ -142,6 +142,7 @@ class App extends React.Component {
     let selectedContract = e.target.value;
     this.setState({
       contractPickedByDonator: selectedContract,
+      childVisible: true,
     })
   }
 
@@ -162,25 +163,32 @@ class App extends React.Component {
     return (
       <div className="App">
         <nav className="navbar pure-menu pure-menu-horizontal">
-          <a href="#" className="pure-menu-heading pure-menu-link">Truffle Box with React</a>
+          <a href="#" className="">Patreon Donation dApp with Truffle and React</a>
         </nav>
+        <br />
         <main className="container">
-          <div className="pure-g">
-            <div className="pure-u-1-1">
-              <h1>Patreon Factory Contract Creator Choices</h1>
-              <div>Click the button below to use the PatreonFactory contract to create your own Patreon contract to accept donations.</div>
-              <div>
-                <input type="text" value={this.state.value} onChange={this.onInput} placeholder="Enter name of contract here"></input>
-                <button onClick={(e) => { this.createPatreonContract(e) }}>Create a Contract</button>
-              </div>
-              <h1>Patreon Factory Contract Donator Choices</h1>
-              <div>Choose the contract you want to interact with: &nbsp;
-                <select onClick={(e) => { this.donatorChoosesContract(e) }}>{dropdownContracts}</select>
-              </div>
-              <div>
-                <SinglePatreonContractUI chosenContract={this.state.contractPickedByDonator}></SinglePatreonContractUI>
-              </div>
+          <div className="test-border col-xs-12 col-sm-6">
+            <h1>Patreon Factory Contract Creator Choices</h1 ><hr />
+            <div className="row">
+              <div className="col-xs-5">Click the button to use the PatreonFactory contract to create your own Patreon contract to accept donations.</div>
+              <button className="col-xs-2 btn btn-warning" onClick={() => { this.createPatreonContract() }}>Create</button>
+              <input className="col-lg-offset-1 col-xs-3 " type="text" value={this.state.value} onChange={this.onInput} placeholder="Enter contract name"></input>
             </div>
+          </div>
+          <br />
+          <div className="test-border col-xs-12 col-sm-6">
+            <h1>Patreon Factory Contract Donator Choices</h1><hr />
+            <div>Choose the contract you want to interact with: &nbsp;
+                <select onClick={(e) => { this.donatorChoosesContract(e) }}>
+                  <option>Select the contract from this Dropdown Menu</option>
+                  {dropdownContracts}
+                  </select>
+            </div>
+          </div>
+          <div>
+            {this.state.childVisible ?
+              <SinglePatreonContractUI chosenContract={this.state.contractPickedByDonator}></SinglePatreonContractUI> : null
+            }
           </div>
         </main>
       </div>
@@ -285,7 +293,7 @@ class SinglePatreonContractUI extends React.Component {
     this.state.web3.eth.getAccounts((error, accounts) => {
       singleContract.at(this.props.chosenContract).then((instance) => {
         contractInstance = instance;
-        let sendAmount = this.state.web3.toWei(1, 'ether');
+        let sendAmount = this.state.web3.toWei(this.state.setOneTimeValue, 'ether');
         return contractInstance.oneTimeContribution({ value: sendAmount, from: accounts[0] });
       }).then((result) => {
         console.log(result);
@@ -301,7 +309,7 @@ class SinglePatreonContractUI extends React.Component {
     this.state.web3.eth.getAccounts((error, accounts) => {
       singleContract.at(this.props.chosenContract).then((instance) => {
         contractInstance = instance;
-        let sendAmount = this.state.web3.toWei(12, 'ether');
+        let sendAmount = this.state.web3.toWei(this.state.setMonthlyValue, 'ether');
         return contractInstance.monthlyContribution({ value: sendAmount, from: accounts[0] });
       }).then((result) => {
         console.log(result);
@@ -395,42 +403,65 @@ class SinglePatreonContractUI extends React.Component {
 
     return (
       <div>
-        <h3> Chosen Contract: {this.props.chosenContract}</h3>
-        <h1>Single Patreon Contract Creator Choices</h1>
-        <div>Set your one time contribution fee in Ether:
-            <input id="singleDonation" type="text" value={this.state.value} onChange={this.onInputSinglePatreon} placeholder="Enter amount of ether people can send to you"></input>
-          <button onClick={() => { this.setOneTimeContribution() }}>Set Fee</button>
+        <br />
+        <div className="chosen-Contract test-border col-xs-12 col-sm-6">
+          <h3> Chosen Contract: {this.props.chosenContract}</h3>
         </div>
-        <div>Set your one Monthly contribution fee in Ether:
-          <input id="monthlyDonation" type="text" value={this.state.value} onChange={this.onInputSinglePatreon} placeholder="Enter monthly amount people can send"></input>
-          <button onClick={() => { this.setMonthly() }}>Set Monthly</button>
-        </div>
-        <div>Get the Contract Balance:
-          <button onClick={() => { this.getContractBalance() }}>It will console log</button>
-          The contract balance is: {this.state.contractBalanceEtherRounded} ether
-        </div>
-        <div>Creator withdraw:
-          <button onClick={() => { this.creatorWithdraw() }}>Check contract balance after</button>
-        </div>
-        <h1>Single Patreon Contract Donator Choices</h1>
-        <div>See the one time fee to see if you want to pay:
-          <button onClick={() => { this.getOneTimecontribution() }}>Get Fee</button>
-        </div>
+        <br />
 
-        <div>The fee is : {this.state.singleDonationFeeBase * Math.pow(10, this.state.singleDonationFeeExponent)} wei</div>
-        <div>In Ether: (this would have to be uniquely made, to acocmdate the c array expanding if there are a lot of decimal points) </div>
-        <div>See the yearly amount you'd pay, which is released each month:
-          <button onClick={() => { this.getMonthly() }}>Get Monthly</button>
+        <div className="test-border col-xs-12 col-sm-6">
+          <h1>Single Patreon Contract Creator Choices</h1><hr />
+
+          <div className="row">
+            <div className="col-xs-5">Set your one time contribution fee in Ether:</div>
+            <button className="col-xs-2 btn btn-warning" onClick={() => { this.setOneTimeContribution() }}>Set</button>
+            <input className="col-lg-offset-1 col-xs-3" id="singleDonation" type="text" value={this.state.value} onChange={this.onInputSinglePatreon} placeholder="Enter single donation"></input>
+          </div>
+
+          <div className="row">
+            <div className="col-xs-5">Set your one Monthly contribution fee in Ether:</div>
+            <button className="col-xs-2 btn btn-warning" onClick={() => { this.setMonthly() }}>Set</button>
+            <input className="col-lg-offset-1 col-xs-3" id="monthlyDonation" type="text" value={this.state.value} onChange={this.onInputSinglePatreon} placeholder="Enter monthly donation"></input>
+          </div>
+
+          <div className="row">
+            <div className="col-xs-5">Get the Contract Balance:</div>
+            <button className="col-xs-2  btn btn-primary" onClick={() => { this.getContractBalance() }}>Get</button>
+            <div className="col-xs-5">The contract balance is {this.state.contractBalanceEtherRounded} ether</div>
+          </div>
+
+          <div className="row">
+            <div className="col-xs-5">Creator withdraw:</div>
+            <button className="col-xs-2  btn btn-warning" onClick={() => { this.creatorWithdraw() }}>Withdraw</button>
+          </div>
+
         </div>
-        <div>The yearly amount is: {this.state.monthlyAmountEtherRounded} Ether. Monthly that is {this.state.monthlyAmountEtherRounded / 12} ether</div>
-        <div>Send one time contibution:
-          <button onClick={() => { this.sendOneTimeContribution() }}>Send One Time contribution</button>
-        </div>
-        <div>Send monthly contibution:
-          <button onClick={() => { this.sendMonthlyContribution() }}>Send Monthly Contribution</button>
-        </div>
-        <div>Cancle your monthly contibution:
-          <button onClick={() => { this.patreonCancle() }}>Click to cancle. Look at your balance after.</button>
+        <br />
+
+        <div className="test-border col-xs-12 col-sm-6">
+          <h1>Single Patreon Contract Donator Choices</h1><hr />
+          <div className="row">
+            <div className="col-xs-5">See the one time fee to see if you want to pay:</div>
+            <button className="col-xs-2 btn btn-primary" onClick={() => { this.getOneTimecontribution() }}>Get Fee</button>
+            <div className="col-xs-5">The fee is : {this.state.singleDonationFeeBase * Math.pow(10, this.state.singleDonationFeeExponent)} wei</div>
+          </div>
+          <div className="row">
+            <div className="col-xs-5">See the yearly amount you'd pay, which is released each month:</div>
+            <button className="col-xs-2 btn btn-primary" onClick={() => { this.getMonthly() }}>Get Monthly</button>
+            <div className="col-xs-5">The yearly amount is: {this.state.monthlyAmountEtherRounded} Ether. Monthly that is {this.state.monthlyAmountEtherRounded / 12} ether</div>
+          </div>
+          <div className="row">
+            <div className="col-xs-5">Send one time contibution:</div>
+            <button className="col-xs-2 btn btn-warning" onClick={() => { this.sendOneTimeContribution() }}>Send</button>
+          </div>
+          <div className="row">
+            <div className="col-xs-5">Send monthly contibution:</div>
+            <button className="col-xs-2 btn btn-warning" onClick={() => { this.sendMonthlyContribution() }}>Send</button>
+          </div>
+          <div className="row">
+            <div className="col-xs-5">Cancle your monthly contibution:</div>
+            <button className="col-xs-2 btn btn-danger" onClick={() => { this.patreonCancle() }}>Cancle</button>
+          </div>
         </div>
       </div>
     );
@@ -486,13 +517,15 @@ Learning about the dev environment
 Bugs
 - creator can keep withdrawing. i THINK this is due to now being unimportant in testrpc. will need
   to investigate
+- when page is refreshed, this.state.setMonthlyValue and this.state.setSingleDonation are both back to 0, so there is no msg.value with Send Buttons. 
 
 
 ToDo List
-- make it look presentable with HTML CSS
-- Test it with test suite in truffle (look into "now" on testrpc)
+- Test it with test suite in truffle (look into "now" on testrpc). Write out a list of possible tests, with inspecting the Solidity Code 
 - then when testing is okay on testrpc, upgrade to testnet
+- full smart contract test documetn
 - once it works fairly well, publish to AWS
+- then make the videos 
 
 
 */
