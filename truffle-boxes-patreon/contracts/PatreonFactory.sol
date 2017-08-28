@@ -5,47 +5,57 @@ contract SinglePatreon {
 /*********************************************STATE VARIABLES***************************************************************************/
 
     address public creator;
-    bytes32 public name;
+    address public owner;
+    bytes32 public name; //contract name 
     uint public singleDonationAmount;
     uint public monthlyDonationAmount;
+    uint public contractBalance = this.balance;
+
     uint contractNumber;
-    uint monthlyCounter = 6; //because we are starting on aug 2017, and its 7th spot in a 12 spot array ************CHANGED TO 6 for TEST
-    uint  leapYearCounter = 1583020800;
-    uint constant leapYearCycle = 126230400;//this number is 4 years plus a day, and it reoccuring on a consistent basis
-    uint contractBalance = this.balance;
-    uint numberOfSingleContributions;
+    uint dynamicFirstOfMonth = 1498867200; //starts on July 1st, 2017. JUST REMOVED THIS FROM function and made state variable. This should fix problem of creator doing unlimited withdrawals
+    uint8 monthlyCounter = 6; //because we are starting on aug 2017, and its 7th spot in a 12 spot array ************CHANGED TO 6 for TEST
+    uint32 public numberOfSingleContributions; //made public as to have an automatic getter function. others could have this done too but I already made getter functions
+    uint64 leapYearCounter = 1583020800; //did not add an assert for this, as it can't be changed easily
+    
+    //maintenance modes 
+    uint8 constant maintenanceNone = 0;
+    uint8 constant maintenance_BalTooHigh = 1;
+    uint8 constant maintenance_Emergency = 255;
+    uint8 public maintenance_mode;
+
+    bool speedBumpBool = true;
+    uint speedBumpTime;
     
     struct donationData {
         address donator;
         uint totalDonationStart;
         uint totalRemaining;
-        uint monthsRemaining;
+        uint8 monthsRemaining;
         uint paymentPerMonth;
     }
     donationData[] public donators;
     //we want to give people the option to only donate once monthly for now (keep it easy). otherwise we would have each address have a dynamic array of possible donations;
     mapping (address => uint) public patreonIDs;
-
     
     //monthly accounting stuff
     uint[13] public ledger;
     //number of patreons
-    uint constant allPatreonsEver = 0;
-    uint constant patreonsNow = 1;
-    uint constant patreonsFinished = 2;
-    uint constant patreonsCancelled = 3;
+    uint8 constant allPatreonsEver = 0;
+    uint8 constant patreonsNow = 1;
+    uint8 constant patreonsFinished = 2;
+    uint8 constant patreonsCancelled = 3;
     //number of donations
-    uint constant totalDonationsEver = 4;
-    uint constant monthlyDonationsAvailable = 5;
-    uint constant totalDonationsWithdrawn = 6;
-    uint constant totalDonationsCancelled = 7; 
+    uint8 constant totalDonationsEver = 4;
+    uint8 constant monthlyDonationsAvailable = 5;
+    uint8 constant totalDonationsWithdrawn = 6;
+    uint8 constant totalDonationsCancelled = 7; 
     //number of ethers
-    uint constant totalEtherEver = 8;
-    uint constant totalEtherNow = 9;
-    uint constant totalEtherWithdrawn = 10;
-    uint constant totalEtherCancelled = 11;
+    uint8 constant totalEtherEver = 8;
+    uint8 constant totalEtherNow = 9;
+    uint8 constant totalEtherWithdrawn = 10;
+    uint8 constant totalEtherCancelled = 11;
     //monthly donation
-    uint constant monthlyDonation = 12; // 0.083, but do i need this constant? 
+    uint8 constant monthlyDonation = 12;
     
 /*********************************************Modifiers, Events, enums***************************************************************************/
 
@@ -60,30 +70,115 @@ contract SinglePatreon {
         _;
     }
     
+    //owner is the person who put the PatreonFactory on the blockchain 
+    //(so the person organizing the whole thing, has the ability to overpower a creator, as you are using the platform)
+    // you dont want a patreon to have ability to withdraw all money, and same with creator (ahead of their time)
+    modifier onlyOwner {
+        if (msg.sender == owner) 
+            revert();
+        _;
+    }
+    
+    modifier notInMaintenance {
+        healthCheck();
+        if (maintenance_mode >= maintenance_Emergency) 
+            revert();
+        _;
+    }
+    
+    /*
+    Creating health check. so you really only need health check what current real balance is, compared to what ledger says
+    probably only need it on functions that people can call, and any funciton that paysout or withdrawss
+    
+    */
+    
+    
+    /* here i am thinking i would like SinglePatreon to only be callable from contractFactory.
+    it would have to be deployed though on real net or testnet
+    so this is blanked out now, but would be filled in and also one Single Patreon contract would be directly linked to one factory.
+    you could always deploy another factory but it wouldn't interact with the other
+    this is what is required, because the FRONT END calls upon patreon factory to give a list of names it can donate too
+    however IF someone wanted to keep callinig single patreon on their own, it wouldnt effect the patreon factory, which is the main contract
+    so it is important that partreon factory can't be messed with or manipulated with entries
+
+    NOTE: it should actually throw at creator = pf.getOringalCreator(contractNumber) - unless called from a patreon contract! (unless someone took made a replica contract whcih returns diff value....)
+    
+    address createdFactoryAddress = 0x..........;
+    modifier onlyFactory {
+        if (msg.sender != createdFactoryAddress )
+    }
+    */
     event LOG_SingleDonation (uint donationAmount, address donator);
     event LOG_Withdraw (uint emptyBalance);
     event LOG_creatorAddressAndSender (address factoryAddress, address creator);
     event LOG_ShowAllMonthlyDonationsOneUser (uint totalDonationStart, uint totalRemaining, uint monthsRemaining, uint paymentPerMonth, address donator);
     event LOG_FullLedger(uint allPatreonsEver, uint patreonsNow, uint patreonsFinished, uint patreonsCancelled, uint totalDonationsEver, uint monthlyDonationsAvailable, uint totalDonationsWithdrawn, uint totalDonationsCancelled, uint totalEtherEver, uint totalEtherNow, uint totalEtherWithdrawn, uint totalEtherCancelled, uint monthlyDonation);
     event LOG_ContractBalance(uint contractBalance);
+    event LOG_HealthCheck(bytes32 message, uint diff, uint balance, uint ledgerBalance);
 
 /*********************************************CONSTRUCTOR FUNCTIONS AND MAIN FUNCTIONS**************************************************************************/
+	function healthCheck() internal {
+		uint diff = uint(this.balance) + ledger[totalEtherNow]; //THIS MIGHT FAIL ON MONTHLY CONTRIBUTION. BECAUSE USER SENDS SOME ETHER, BEFORE LEDGER CAN UPDATE
+		if (diff == 0) {
+			return; // everything ok.
+		}
+		if (diff > 0) {
+			LOG_HealthCheck('Balance too high', diff, this.balance, ledger[totalEtherNow]);
+			maintenance_mode = maintenance_BalTooHigh;
+		} else {
+			LOG_HealthCheck('Balance too low', diff, this.balance, ledger[totalEtherNow]);
+			maintenance_mode = maintenance_Emergency;
+		}
+	}
 
+	// manually perform healthcheck.
+	// @param _maintenance_mode: 
+	// 		0 = reset maintenance_mode, even in emergency
+	// 		1 = perform health check
+	//    255 = set maintenance_mode to maintenance_emergency (no newPolicy anymore)
+	function performHealthCheck(uint8 _maintenance_mode) onlyOwner {
+		maintenance_mode = _maintenance_mode;
+		if (maintenance_mode > 0 && maintenance_mode < maintenance_Emergency) {
+			healthCheck();
+		}
+	}
+    
+    // if ledger gets corrupt for unknown reasons, have a way to correct it, only the owner can do so 
+	function audit(uint8 _from, uint8 _to, uint _amount) onlyOwner {
+
+		ledger[_from] -= uint(_amount);
+		ledger[_to] += uint(_amount);
+
+	}
+	
+	
+	//owner has a way to send back money to a patreon or a creator 
+	//this should also let me test 
+	function refundForMistake(address refundee, uint amount) onlyOwner {
+
+        refundee.transfer(amount);
+		maintenance_mode = maintenance_Emergency; // don't allow any contributions or withdrawals
+
+	}
+    
+    
     function SinglePatreon (bytes32 _name, uint _contractNumber) payable {
         contractNumber = _contractNumber;
         PatreonFactory pf = PatreonFactory(msg.sender);
         name = _name;
         creator = pf.getOriginalCreator(contractNumber); //need to get original creator, not the contract address, to approve the guy to set his limits and withdraw
+        owner = pf.getOwner();
     
         LOG_creatorAddressAndSender(msg.sender, creator);//msg.sender is the factory. creator is the guy who made it. it gets logged at bytes32 in events, i guess because thats all that contracts can pass to each other
     }
 
-    function setOneTimeContribution(uint setAmountInWei) onlyCreator  returns(uint) {
+    function setOneTimeContribution(uint setAmountInWei) external onlyCreator  returns(uint) {
+        require(0 < setAmountInWei && setAmountInWei < 100 ether); //to prevent overflow and limit max donation to 100 ether
         singleDonationAmount = setAmountInWei;
         return singleDonationAmount;
     }
     
-    function oneTimeContribution() payable onlyPatreons {
+    function oneTimeContribution() external payable onlyPatreons {
         if (msg.value != singleDonationAmount) 
             revert(); 
         
@@ -94,7 +189,9 @@ contract SinglePatreon {
 
       }
 
-    function setMonthlyContribution(uint setMonthlyInWei) onlyCreator  returns(uint) {
+    function setMonthlyContribution(uint setMonthlyInWei) external onlyCreator  returns(uint) {
+        require(0 < setMonthlyInWei && setMonthlyInWei < 1200 ether); //to prevent overflow, and limit to 100 ether a month
+        require(setMonthlyInWei % 12 == 0); //making the monthly contributions divisble by 12 for simplicity of a yearly contract, and not losing any wei 
         monthlyDonationAmount = setMonthlyInWei; //you can have the front end display it in ether, but it will be sent in wei and converted front end
         return monthlyDonationAmount;
     }
@@ -102,7 +199,7 @@ contract SinglePatreon {
     // it appears that this returns function returns nothings
     //the only place where ledger has permanent things added
     //note that ether is straight up sent with this function, so there is no token or ledger transfer here. it just is 
-    function monthlyContribution() payable onlyPatreons returns(uint) {
+    function monthlyContribution() external payable onlyPatreons notInMaintenance returns(uint) {
         
         if (msg.value != monthlyDonationAmount) 
             revert();
@@ -125,6 +222,8 @@ contract SinglePatreon {
         
         donators[patreonID] = pd; // i think this is a roundabout way of filling in donators. i make an instance of it, which is just a blank. i fill it in. then i go back and assign it. . i think i could just do it directly? 
         //MAYBE THIS IS CHEAPER THOUGH. i make 5 memorys and one storage change, vs. 5 storage changes     
+        
+        //this does not work because of integer division. but should work if number is divisable by 12 
         assert(pd.totalRemaining == pd.monthsRemaining*pd.paymentPerMonth);
 
         
@@ -133,7 +232,7 @@ contract SinglePatreon {
         ledger[monthlyDonation] = pd.paymentPerMonth; //right now 0.083. but it could be changed, if i let users pick months. but it gets more difficult. MVP
         ledger[allPatreonsEver] += 1;
         ledger[patreonsNow] += 1;
-        assert(ledger[allPatreonsEver] == ledger[patreonsCancelled]+ledger[allPatreonsEver]+ledger[patreonsNow]);
+        assert(ledger[allPatreonsEver] == (ledger[patreonsCancelled]+ledger[patreonsFinished]+ledger[patreonsNow]));
         
         ledger[totalDonationsEver] += 12;
         ledger[monthlyDonationsAvailable] += 12;
@@ -150,7 +249,7 @@ contract SinglePatreon {
     //ledger here removes things so they can't ever get completed 
     //remember, the patreons HAS already submitted their whole year of ether donations. this function only allows them to claim back some of it 
     //if the creator has not taken their month on August 3rd say, and the person wants their refund, as it stands now they can claim their refund because tardiness of creator
-    function patreonCancleMonthly() onlyPatreons {
+    function patreonCancleMonthly() external onlyPatreons notInMaintenance {
         uint patreonID = patreonIDs[msg.sender];
         
         //this is needed because any msg.sender that has not been created could otherwise steal the first donators cash in here
@@ -171,7 +270,7 @@ contract SinglePatreon {
       
         ledger[patreonsCancelled] += 1;
         ledger[patreonsNow] -= 1;
-        assert(ledger[allPatreonsEver] == ledger[patreonsCancelled]+ledger[allPatreonsEver]+ledger[patreonsNow]);
+        assert(ledger[allPatreonsEver] == ledger[patreonsCancelled]+ledger[patreonsFinished]+ledger[patreonsNow]);
         
         ledger[monthlyDonationsAvailable] -= monthsRemoved;
         ledger[totalDonationsCancelled] += monthsRemoved;
@@ -183,6 +282,8 @@ contract SinglePatreon {
         
         donators[patreonID].totalRemaining = 0;
         donators[patreonID].monthsRemaining = 0;
+        
+        //won't work, integer division
         assert(donators[patreonID].totalRemaining == donators[patreonID].monthsRemaining*donators[patreonID].paymentPerMonth);
 
         msg.sender.transfer(refund);
@@ -206,29 +307,10 @@ contract SinglePatreon {
     
     //ledger here has things moved from being completed
     ///BUG - SOME REASON IT IS LETTING FULL WITHDRAWAL, repreated
-    function creatorWithdrawMonthly() onlyCreator { //right now people only contribute for a 12 month term. I GUESS the user 
-        
-        //march 31 2020 = 1583020800
-        //march 31 20201 = 1614556800
-        //march 31 2024 = 1709251200
-        
-        //july 1st 2017, to test one month withdrawl = 1498867200;
-        
-        uint dynamicFirstOfMonth = 1498867200; //starts on August 1st, 2017
-        
-        uint secondsInOneMonth31 = 2678400; // aug, oct dec, jan, mar, may, july
-        uint secondsInOneMonth30 = 2592000; //sept, nov, april, june
-        uint secondsInOneMonth28 = 2419200; // feb
-        uint secondsInOneMonth29 = 2505600; // feb 29 2020, etc.
-        
-        //making sure no overflow has happened
-        assert(dynamicFirstOfMonth > 1498867200);
-        //make sure months are not trailing off
-        assert(monthlyCounter >= 12);
-        assert(monthlyCounter <= 0);
-        
-        if (now > dynamicFirstOfMonth) { //accoridng to this, if guy is two months behind, he can only withdraw one at a time. will need to do 2 transactions
+    function creatorWithdrawMonthly() external onlyCreator notInMaintenance{ //right now people only contribute for a 12 month term. I GUESS the user 
 
+        if (now > dynamicFirstOfMonth) { //accoridng to this, if guy is two months behind, he can only withdraw one at a time. will need to do 2 transactions
+            oneDaySpeedBump();//we want right here just so if creator accidentally calls contract an hour early, he doesnt negate himself a day
             uint amountToWithdraw = ledger[patreonsNow]*ledger[monthlyDonation];
             //deal with patreons in ledger
             ledger[monthlyDonationsAvailable] -= ledger[patreonsNow]; //if there were 5 patreons, 5 monthly donations were withdrawn! so minus that
@@ -244,68 +326,110 @@ contract SinglePatreon {
             uint patreonsCompleted = checkIfPatreonsAreDoneDonating();
             ledger[patreonsNow] -= patreonsCompleted;
             ledger[patreonsFinished] += patreonsCompleted;
-            assert(ledger[allPatreonsEver] == ledger[patreonsCancelled]+ledger[allPatreonsEver]+ledger[patreonsNow]);
+            assert(ledger[allPatreonsEver] == ledger[patreonsCancelled]+ledger[patreonsFinished]+ledger[patreonsNow]);
 
-            //if statement that changes dynamicFirstOfMonth, with math. then increment 
-            if (monthlyCounter == 7 || monthlyCounter == 9 || monthlyCounter == 11 || monthlyCounter == 0 || monthlyCounter == 2 || monthlyCounter == 4 || monthlyCounter == 6) {
-                dynamicFirstOfMonth += secondsInOneMonth31;
-                if (monthlyCounter == 11) {
-                    monthlyCounter = 0;
-                } else {
-                    monthlyCounter++;
-                }
-            } else if (monthlyCounter == 8 || monthlyCounter == 10 || monthlyCounter == 3 || monthlyCounter == 5) {
-                dynamicFirstOfMonth += secondsInOneMonth30;
-                monthlyCounter++;
-            } else {
-                if (now > leapYearCounter) {
-                    dynamicFirstOfMonth = dynamicFirstOfMonth + secondsInOneMonth29;
-                    leapYearCounter += leapYearCycle;
-                    monthlyCounter++;
-                } else {
-                    dynamicFirstOfMonth += secondsInOneMonth28;
-                    monthlyCounter++;
-                }
-            }
+            updateMonthlyCounter();
 
             LOG_ContractBalance(this.balance);
             creator.transfer(amountToWithdraw);
             LOG_ContractBalance(this.balance);
             LOG_FullLedger(ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
         }
+        else
+            revert();
+    }
+    function updateMonthlyCounter() internal {
+        //make sure months are not trailing off
+        assert(monthlyCounter <= 11);
+        assert(monthlyCounter >= 0);
+        //making sure no overflow has happened
+        assert(dynamicFirstOfMonth + 1 > 1498867200);
+
+        //march 31 2020 = 1583020800
+        //march 31 20201 = 1614556800
+        //march 31 2024 = 1709251200        
+        uint64 leapYearCycle = 126230400;//this number is 4 years plus a day, and it reoccuring on a consistent basis
+
+        uint secondsInOneMonth31 = 2678400; // aug, oct dec, jan, mar, may, july
+        uint secondsInOneMonth30 = 2592000; //sept, nov, april, june
+        uint secondsInOneMonth28 = 2419200; // feb
+        uint secondsInOneMonth29 = 2505600; // feb 29 2020, etc.
+        
+        //if statement that changes dynamicFirstOfMonth, with math. then increment 
+        if (monthlyCounter == 7 || monthlyCounter == 9 || monthlyCounter == 11 || monthlyCounter == 0 || monthlyCounter == 2 || monthlyCounter == 4 || monthlyCounter == 6) {
+            dynamicFirstOfMonth += secondsInOneMonth31;
+            if (monthlyCounter == 11) {
+                monthlyCounter = 0;
+            } else {
+                monthlyCounter++;
+            }
+        } else if (monthlyCounter == 8 || monthlyCounter == 10 || monthlyCounter == 3 || monthlyCounter == 5) {
+            dynamicFirstOfMonth += secondsInOneMonth30;
+            monthlyCounter++;
+        } else {
+            if (now > leapYearCounter) {
+                dynamicFirstOfMonth = dynamicFirstOfMonth + secondsInOneMonth29;
+                leapYearCounter += leapYearCycle;
+                monthlyCounter++;
+            } else {
+                dynamicFirstOfMonth += secondsInOneMonth28;
+                monthlyCounter++;
+            }
+        }
+    }
+
+    function oneDaySpeedBump() internal {
+        if(speedBumpBool == true) {
+            speedBumpTime = now + 86400;
+            speedBumpBool = false;
+        } else if (now < speedBumpTime) {
+            revert();
+        } else {
+            speedBumpTime = now + 86400;
+        }
     }
 /*********************************************GETTER FUNCTIONS AND FALLBACK FUNCTION**************************************************************************/
 
-    function getOneTimecontribution() constant returns(uint singleDonation) {
+    function getOneTimecontribution() constant external returns(uint singleDonation) {
         return singleDonationAmount;
     }
       //gets the monthly donation amount entered by contract owner
-    function getMonthlyDonationAmount() constant returns (uint monthlyDonation) {
+    function getMonthlyDonationAmount() constant external returns (uint monthlyDonation) {
         return  monthlyDonationAmount;
     }
     //maybe not needed, contract balanace should suffice ?
-    function getMonthsLeftForDonation() constant returns (uint monthsLeft) {
+    function getMonthsLeftForDonation() constant external returns (uint monthsLeft) {
           return ledger[monthlyDonationsAvailable];
     }
-    function getContractBalance()  constant returns(uint contractBalance) {
+    function getContractBalance()  constant external returns(uint contractBalance) {
         return this.balance;
     }
-    function () {} //fallback function.  dont accept ether to this contract without calling the constructor function or others. this way, people dont accidentally burn their money
+    //owner can only send, the fix any error in withdrawals
+    function () onlyOwner{}
+    
     }//end contract
 
 /*********************************************FACTORY CONTRACT BELOW**************************************************************************/
 
 
 contract PatreonFactory {
-    bytes32[] names;
-    address[] newContracts;
-    address[] originalCreators;
-    
-    address factoryAddress = this;
+    bytes32[] public names;
+    address[] public newContracts;
+    address[] public originalCreators;
+    address public owner;
     
     event LOG_NewContractAddress (address theNewcontract, address indexed theContractCreator);
+    
+    function PatreonFactory () {
+        owner = msg.sender;
+    }
 
-    function createContract (bytes32 name) returns(address theNewContract, bytes32 contractName, uint contractNum, address creatorAddress) {
+    function createContract (bytes32 name) external returns(address theNewContract, bytes32 contractName, uint contractNum, address creatorAddress) {
+        //loop to prevent duplicate names. uint32 to shorten loop (although still 5 billion)
+        for (uint32 i = 0; i<names.length; i++) {
+            assert(name != names[i]);
+        }
+        
         uint contractNumber = newContracts.length;
         originalCreators.push(msg.sender);
         address newContract = new SinglePatreon(name, contractNumber);
@@ -316,29 +440,33 @@ contract PatreonFactory {
         return (newContract, name, contractNumber, msg.sender);
     } 
 
-    function getName(uint i) constant returns(bytes32 contractName) {
+    function getName(uint i) constant external returns(bytes32 contractName) {
         return names[i];
     }
-    function getContractAddressAtIndex(uint i) constant returns(address contractAddress) {
+    function getContractAddressAtIndex(uint i) constant external returns(address contractAddress) {
         return newContracts[i];
     }
     
-    function getOriginalCreator(uint i) constant returns (address originalCreator) {
+    function getOriginalCreator(uint i) constant external returns (address originalCreator) {
         return originalCreators[i];
     }
 
-    function getNameArray() constant returns(bytes32[] contractName) {
+    function getNameArray() constant external returns(bytes32[] contractName) {
         return names;
     }
-    function getContractAddressArray() constant returns(address[] contractAddress) {
+    function getContractAddressArray() constant external returns(address[] contractAddress) {
         return newContracts;
     }
     
-    function getOriginalCreatorArray() constant returns (address[] originalCreator) {
+    function getOriginalCreatorArray() constant external returns (address[] originalCreator) {
         return originalCreators;
     }
+    
+    function getOwner() constant external returns (address _owner) {
+        return owner;
+    }
 
-    function () {}
+    function () {} //can't send ether with send unless payable modifier exists
 }
 /*
 
