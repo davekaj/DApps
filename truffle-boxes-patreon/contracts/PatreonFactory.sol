@@ -14,7 +14,7 @@ contract SinglePatreon {
     uint contractNumber;
     uint dynamicFirstOfMonth = 1498867200; //starts on July 1st, 2017. JUST REMOVED THIS FROM function and made state variable. This should fix problem of creator doing unlimited withdrawals
     uint8 monthlyCounter = 6; //because we are starting on aug 2017, and its 7th spot in a 12 spot array ************CHANGED TO 6 for TEST
-    uint32 public numberOfSingleContributions; //made public as to have an automatic getter function. others could have this done too but I already made getter functions
+    uint32 public numberOfSingleContributions;
     uint64 leapYearCounter = 1583020800; //did not add an assert for this, as it can't be changed easily
     
     //maintenance modes 
@@ -74,7 +74,7 @@ contract SinglePatreon {
     //(so the person organizing the whole thing, has the ability to overpower a creator, as you are using the platform)
     // you dont want a patreon to have ability to withdraw all money, and same with creator (ahead of their time)
     modifier onlyOwner {
-        if (msg.sender == owner) 
+        if (msg.sender != owner) 
             revert();
         _;
     }
@@ -105,28 +105,27 @@ contract SinglePatreon {
     
     address createdFactoryAddress = 0x..........;
     modifier onlyFactory {
-        if (msg.sender != createdFactoryAddress )
+        if (msg.sender != createdFactoryAddress 
     }
     */
     event LOG_SingleDonation (uint donationAmount, address donator);
-    event LOG_Withdraw (uint emptyBalance);
-    event LOG_creatorAddressAndSender (address factoryAddress, address creator);
-    event LOG_ShowAllMonthlyDonationsOneUser (uint totalDonationStart, uint totalRemaining, uint monthsRemaining, uint paymentPerMonth, address donator);
-    event LOG_FullLedger(uint allPatreonsEver, uint patreonsNow, uint patreonsFinished, uint patreonsCancelled, uint totalDonationsEver, uint monthlyDonationsAvailable, uint totalDonationsWithdrawn, uint totalDonationsCancelled, uint totalEtherEver, uint totalEtherNow, uint totalEtherWithdrawn, uint totalEtherCancelled, uint monthlyDonation);
-    event LOG_ContractBalance(uint contractBalance);
+    event LOG_PatreonContractCreated (address creator);
+    event LOG_ChangeToSingleDonatorStruct (uint totalDonationStart, uint totalRemaining, uint monthsRemaining, uint paymentPerMonth, address donator);
+    event LOG_ChangeToFullLedger (uint allPatreonsEver, uint patreonsNow, uint patreonsFinished, uint patreonsCancelled, uint totalDonationsEver, uint monthlyDonationsAvailable, uint totalDonationsWithdrawn, uint totalDonationsCancelled, uint totalEtherEver, uint totalEtherNow, uint totalEtherWithdrawn, uint totalEtherCancelled, uint monthlyDonation);
+    event LOG_ChangeToContractBalance (uint contractBalance);
     event LOG_HealthCheck(bytes32 message, uint diff, uint balance, uint ledgerBalance);
 
 /*********************************************CONSTRUCTOR FUNCTIONS AND MAIN FUNCTIONS**************************************************************************/
 	function healthCheck() internal {
-		uint diff = uint(this.balance) + ledger[totalEtherNow]; //THIS MIGHT FAIL ON MONTHLY CONTRIBUTION. BECAUSE USER SENDS SOME ETHER, BEFORE LEDGER CAN UPDATE
+		uint diff = contractBalance + ledger[totalEtherNow]; //THIS MIGHT FAIL ON MONTHLY CONTRIBUTION. BECAUSE USER SENDS SOME ETHER, BEFORE LEDGER CAN UPDATE
 		if (diff == 0) {
 			return; // everything ok.
 		}
 		if (diff > 0) {
-			LOG_HealthCheck('Balance too high', diff, this.balance, ledger[totalEtherNow]);
+			LOG_HealthCheck("Balance too high", diff, contractBalance, ledger[totalEtherNow]);
 			maintenance_mode = maintenance_BalTooHigh;
 		} else {
-			LOG_HealthCheck('Balance too low', diff, this.balance, ledger[totalEtherNow]);
+			LOG_HealthCheck("Balance too low", diff, contractBalance, ledger[totalEtherNow]);
 			maintenance_mode = maintenance_Emergency;
 		}
 	}
@@ -136,7 +135,7 @@ contract SinglePatreon {
 	// 		0 = reset maintenance_mode, even in emergency
 	// 		1 = perform health check
 	//    255 = set maintenance_mode to maintenance_emergency (no newPolicy anymore)
-	function performHealthCheck(uint8 _maintenance_mode) onlyOwner {
+	function performHealthCheck(uint8 _maintenance_mode) external onlyOwner {
 		maintenance_mode = _maintenance_mode;
 		if (maintenance_mode > 0 && maintenance_mode < maintenance_Emergency) {
 			healthCheck();
@@ -144,62 +143,71 @@ contract SinglePatreon {
 	}
     
     // if ledger gets corrupt for unknown reasons, have a way to correct it, only the owner can do so 
-	function audit(uint8 _from, uint8 _to, uint _amount) onlyOwner {
+	function auditLedger(uint8 _from, uint8 _to, uint _amount) external onlyOwner {
 
 		ledger[_from] -= uint(_amount);
 		ledger[_to] += uint(_amount);
+        LOG_ChangeToFullLedger (ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
+
+        //NOTE: need to also have here an update to donators struct possible
 
 	}
+
+    function auditDonator(uint _totalRemaining, uint8 _monthsRemaining, uint _patreonID) external onlyOwner {
+
+        donators[_patreonID].totalRemaining = _totalRemaining;
+        donators[_patreonID].monthsRemaining = _monthsRemaining;
+        LOG_ChangeToSingleDonatorStruct(donators[_patreonID].totalDonationStart,  donators[_patreonID].totalRemaining,  donators[_patreonID].monthsRemaining,  donators[_patreonID].paymentPerMonth,  donators[_patreonID].donator);
+
+    }
 	
 	
 	//owner has a way to send back money to a patreon or a creator 
 	//this should also let me test 
-	function refundForMistake(address refundee, uint amount) onlyOwner {
+	function refundForMistake(address refundee, uint amount) external onlyOwner {
 
         refundee.transfer(amount);
 		maintenance_mode = maintenance_Emergency; // don't allow any contributions or withdrawals
+        LOG_ChangeToContractBalance(contractBalance);
 
 	}
     
     
-    function SinglePatreon (bytes32 _name, uint _contractNumber) payable {
+    function SinglePatreon (bytes32 _name, uint _contractNumber) {
         contractNumber = _contractNumber;
         PatreonFactory pf = PatreonFactory(msg.sender);
         name = _name;
         creator = pf.getOriginalCreator(contractNumber); //need to get original creator, not the contract address, to approve the guy to set his limits and withdraw
         owner = pf.getOwner();
     
-        LOG_creatorAddressAndSender(msg.sender, creator);//msg.sender is the factory. creator is the guy who made it. it gets logged at bytes32 in events, i guess because thats all that contracts can pass to each other
+        LOG_PatreonContractCreated(creator);
     }
 
-    function setOneTimeContribution(uint setAmountInWei) external onlyCreator  returns(uint) {
+    function setOneTimeContribution(uint setAmountInWei) external onlyCreator {
         require(0 < setAmountInWei && setAmountInWei < 100 ether); //to prevent overflow and limit max donation to 100 ether
         singleDonationAmount = setAmountInWei;
-        return singleDonationAmount;
     }
     
     function oneTimeContribution() external payable onlyPatreons {
         if (msg.value != singleDonationAmount) 
             revert(); 
         
-        LOG_ContractBalance(this.balance);
         creator.transfer(msg.value);
-        LOG_ContractBalance(this.balance);
         numberOfSingleContributions++;
+        //note no log of event here because transfer goes directly to account. no contract involved
 
       }
 
-    function setMonthlyContribution(uint setMonthlyInWei) external onlyCreator  returns(uint) {
+    function setMonthlyContribution(uint setMonthlyInWei) external onlyCreator {
         require(0 < setMonthlyInWei && setMonthlyInWei < 1200 ether); //to prevent overflow, and limit to 100 ether a month
         require(setMonthlyInWei % 12 == 0); //making the monthly contributions divisble by 12 for simplicity of a yearly contract, and not losing any wei 
         monthlyDonationAmount = setMonthlyInWei; //you can have the front end display it in ether, but it will be sent in wei and converted front end
-        return monthlyDonationAmount;
     }
 
     // it appears that this returns function returns nothings
     //the only place where ledger has permanent things added
     //note that ether is straight up sent with this function, so there is no token or ledger transfer here. it just is 
-    function monthlyContribution() external payable onlyPatreons notInMaintenance returns(uint) {
+    function monthlyContribution() external payable onlyPatreons notInMaintenance {
         
         if (msg.value != monthlyDonationAmount) 
             revert();
@@ -242,8 +250,8 @@ contract SinglePatreon {
         ledger[totalEtherNow] += 1 ether;
         assert(ledger[totalEtherEver] == ledger[totalEtherNow]+ledger[totalEtherWithdrawn]+ledger[totalEtherCancelled]);
 
-
-        LOG_ShowAllMonthlyDonationsOneUser ( pd.totalDonationStart,  pd.totalRemaining,  pd.monthsRemaining,  pd.paymentPerMonth,  msg.sender); 
+        LOG_ChangeToFullLedger (ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
+        LOG_ChangeToSingleDonatorStruct (pd.totalDonationStart,  pd.totalRemaining,  pd.monthsRemaining,  pd.paymentPerMonth,  msg.sender); 
     }
 
     //ledger here removes things so they can't ever get completed 
@@ -257,17 +265,13 @@ contract SinglePatreon {
             revert();
         }
         
-        LOG_ShowAllMonthlyDonationsOneUser ( donators[patreonID].totalDonationStart,  donators[patreonID].totalRemaining,  donators[patreonID].monthsRemaining,  donators[patreonID].paymentPerMonth,  donators[patreonID].donator);
         uint refund =  donators[patreonID].totalRemaining;
         
         if (refund == 0)
             revert();
        
         uint monthsRemoved = donators[patreonID].monthsRemaining;
-       
-        LOG_FullLedger(ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
-        LOG_ContractBalance(this.balance);
-      
+             
         ledger[patreonsCancelled] += 1;
         ledger[patreonsNow] -= 1;
         assert(ledger[allPatreonsEver] == ledger[patreonsCancelled]+ledger[patreonsFinished]+ledger[patreonsNow]);
@@ -288,8 +292,9 @@ contract SinglePatreon {
 
         msg.sender.transfer(refund);
 
-        LOG_FullLedger(ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
-        LOG_ContractBalance(this.balance);
+        LOG_ChangeToSingleDonatorStruct (donators[patreonID].totalDonationStart,  donators[patreonID].totalRemaining,  donators[patreonID].monthsRemaining,  donators[patreonID].paymentPerMonth,  donators[patreonID].donator);
+        LOG_ChangeToFullLedger (ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
+        LOG_ChangeToContractBalance(contractBalance);
     }
     
     function checkIfPatreonsAreDoneDonating () internal returns (uint _patreonsDone) {
@@ -307,7 +312,7 @@ contract SinglePatreon {
     
     //ledger here has things moved from being completed
     ///BUG - SOME REASON IT IS LETTING FULL WITHDRAWAL, repreated
-    function creatorWithdrawMonthly() external onlyCreator notInMaintenance{ //right now people only contribute for a 12 month term. I GUESS the user 
+    function creatorWithdrawMonthly() external onlyCreator notInMaintenance { //right now people only contribute for a 12 month term. I GUESS the user 
 
         if (now > dynamicFirstOfMonth) { //accoridng to this, if guy is two months behind, he can only withdraw one at a time. will need to do 2 transactions
             oneDaySpeedBump();//we want right here just so if creator accidentally calls contract an hour early, he doesnt negate himself a day
@@ -330,10 +335,9 @@ contract SinglePatreon {
 
             updateMonthlyCounter();
 
-            LOG_ContractBalance(this.balance);
             creator.transfer(amountToWithdraw);
-            LOG_ContractBalance(this.balance);
-            LOG_FullLedger(ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
+            LOG_ChangeToContractBalance(contractBalance);
+            LOG_ChangeToFullLedger (ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
         }
         else
             revert();
@@ -402,10 +406,13 @@ contract SinglePatreon {
           return ledger[monthlyDonationsAvailable];
     }
     function getContractBalance()  constant external returns(uint contractBalance) {
-        return this.balance;
+        return contractBalance;
+    }
+    function getTotalSingleContributors() constant external returns(uint _numberOfSingleContributions) {
+        return numberOfSingleContributions;
     }
     //owner can only send, the fix any error in withdrawals
-    function () onlyOwner{}
+    function () onlyOwner {}
     
     }//end contract
 
@@ -418,13 +425,13 @@ contract PatreonFactory {
     address[] public originalCreators;
     address public owner;
     
-    event LOG_NewContractAddress (address theNewcontract, address indexed theContractCreator);
+    event LOG_NewContractAddress (address indexed theNewcontract, address indexed theContractCreator);
     
     function PatreonFactory () {
         owner = msg.sender;
     }
 
-    function createContract (bytes32 name) external returns(address theNewContract, bytes32 contractName, uint contractNum, address creatorAddress) {
+    function createContract (bytes32 name) external {
         //loop to prevent duplicate names. uint32 to shorten loop (although still 5 billion)
         for (uint32 i = 0; i<names.length; i++) {
             assert(name != names[i]);
@@ -437,7 +444,6 @@ contract PatreonFactory {
         names.push(name);
         
         LOG_NewContractAddress (newContract, msg.sender);
-        return (newContract, name, contractNumber, msg.sender);
     } 
 
     function getName(uint i) constant external returns(bytes32 contractName) {
