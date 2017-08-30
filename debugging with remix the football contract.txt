@@ -1,0 +1,90 @@
+Debugging
+
+even when i send the contract 5 ether upon creation, the contract balance does not get it. it ends up as -5 ether, and error fund ends up as 5 ether
+
+function was not labeled payable. it should be (the newEntry one, otherwise user cant send money to that function
+
+
+"c8dc876a-099e-4e95-93dc-0eb143c6954f", "H", 1470614500
+
+
+some reason the error fund is 2.5 eth and i missed it . happened in contract creation, not newEntry
+
+Line 290 -bytes32 gameID = _gameTagFromAPI
+	it gives me a 32byte long hex code, not the acutal game id. is this bytes 32 just converting it? this may not work . this propogates through the whole thing, and instance on line 300 gets it
+
+line 291 game gameMapping - doesnt appear to put an actual value in the mapping of games
+
+i need to write gameMapping.gameTagAPI = gameID. otherwise I am not labeling anything!
+
+line 299 - getOperatingCostsAndRemainingPool - i think this needs to be payable. and im not 100% certain how to relay passing this ether through here. NOOOOO IT WORKED! YESS!!!!
+
+but there is a problem with bookkeeping. takes -.1 ether from contract balance(which has -5 right now) and gives to pool fund. which is correct. then pool fund correctly hands out the amount that is supposed to g to error and update dapp. although this pricing scheme is still messed up from going from pool to single bet.....
+
+everything except gameID good for new entry right before LOG_entryApplied
+
+
+okay so, LOG_entryApplied seems to have worked. all it does is really confirm that an entry has been applied and it puts it on the blockchain. that is IT. no functionality really 
+
+events get logged to the EVM. which in turn can be ysed to CALL javascript callbacks in the user interface of a dapp, which listens for these events (SO THEY ALLOW FRONT END TO CONFIRM WHEN AN EVENT HAPPENS. im sure etherscan works like this). events are stored essentially forever in the blockchain. LOG AND EVENT DATA IS NOT ACCESSIBLE FROM WITHIN CONTRACTS (not even the contract that created them!) - you can also INDEX them to make them easily searchable
+
+
+line 320 - entries (big struct) and entryId(mapping 0,1,2,3 to addresses) appear to be working 
+
+line 328 - _tempFixGameID - didnt seme to work . string is a blank!. and it is supposed to be a fix! okay, well make it a global variable. WRONG! solidity goes through and confirms the varialbes first, then goes through and starts to assign them values. so it did work, dummy
+
+line 331 - strConcat works. oraclize_query does not work. it just breaks 
+
+
+note, not sending 0.1 ether works to end the contract. note that you can see events LOGGED in the contract window
+
+
+--mnemonic WILL GIVE YOU TESTRPC TO HAVE THE SAME ADDRESSES OVER AND OVER AGAIN. WHICH IS GREAT FOR TESTING. but you gotta give it a mnemonic phrase. and use that one over and over again ex: "myTest"
+
+--acounts 50 will give you 50 eth accounts
+
+https://ethereum.stackexchange.com/questions/11383/oracle-oraclize-it-with-truffle-and-testrpc - very good explaination on how to get oraclize to work on a test net . deals a lot with OAR which i dont get, because it has something to do with oraclize docs
+
+
+Summary of new problems
+
+oraclize wasnt working in the remix version, need to use JVM with oraclize version
+
+to get it working with a test net need to install ethererum bridge
+
+https://ethereum.stackexchange.com/questions/11383/oracle-oraclize-it-with-truffle-and-testrpc?rq=1
+
+My problem is i get the value 12 back from oraclize, but i dont get the second callback :(. 
+
+i also want to try to run this whole thing through truffle, and then react app as well
+
+maybe i will split off and just try to get my first contract running with react app. and build from there, add little functioanlyity. start off with just getting londons temperature :)
+
+oraclize is hard to use
+
+the other idea is build a parteron app to get it going and working
+
+kraken keeps getting updtaed, which i dont like
+
+i think i can just do event LOG to debug. but i might need to user bytes32
+
+make contracts payable! with oraclize
+
+now reentryGuard is failing the contract! why! need to understand this a little better
+
+go read ethereum white paper and yellow paper ...
+
+talking to people is really helpful!
+
+
+MY NEUMONIC = "david"
+
+
+
+http://dapps.oraclize.it/browser-solidity/#gist=913bb3815370c200bd3fd91e58fb69a9&version=soljson-v0.4.13+commit.fb4cb1a.js  oraclize REMIX
+
+https://gitter.im/oraclize/ethereum-api
+
+https://ethereum.stackexchange.com/questions/12045/oraclize-testrpc-truffle-results-arent-updating-in-contract
+
+https://ethereum.stackexchange.com/questions/11383/oracle-oraclize-it-with-truffle-and-testrpc?rq=1

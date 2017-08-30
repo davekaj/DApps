@@ -1,4 +1,4 @@
-pragma solidity ^0.4.12;
+pragma solidity ^0.4.13;
 
 contract SinglePatreon {
     
@@ -11,7 +11,7 @@ contract SinglePatreon {
     uint public monthlyDonationAmount;
     uint public contractBalance = this.balance;
 
-    uint contractNumber;
+    uint public contractNumber;
     uint dynamicFirstOfMonth = 1498867200; //starts on July 1st, 2017. JUST REMOVED THIS FROM function and made state variable. This should fix problem of creator doing unlimited withdrawals
     uint8 monthlyCounter = 6; //because we are starting on aug 2017, and its 7th spot in a 12 spot array ************CHANGED TO 6 for TEST
     uint32 public numberOfSingleContributions;
@@ -109,7 +109,7 @@ contract SinglePatreon {
     }
     */
     event LOG_SingleDonation (uint donationAmount, address donator);
-    event LOG_PatreonContractCreated (address creator);
+    event LOG_PatreonContractCreated (address creator, address createdContract);
     event LOG_ChangeToSingleDonatorStruct (uint totalDonationStart, uint totalRemaining, uint monthsRemaining, uint paymentPerMonth, address donator);
     event LOG_ChangeToFullLedger (uint allPatreonsEver, uint patreonsNow, uint patreonsFinished, uint patreonsCancelled, uint totalDonationsEver, uint monthlyDonationsAvailable, uint totalDonationsWithdrawn, uint totalDonationsCancelled, uint totalEtherEver, uint totalEtherNow, uint totalEtherWithdrawn, uint totalEtherCancelled, uint monthlyDonation);
     event LOG_ChangeToContractBalance (uint contractBalance);
@@ -180,7 +180,7 @@ contract SinglePatreon {
         creator = pf.getOriginalCreator(contractNumber); //need to get original creator, not the contract address, to approve the guy to set his limits and withdraw
         owner = pf.getOwner();
     
-        LOG_PatreonContractCreated(creator);
+        LOG_PatreonContractCreated(creator, this);
     }
 
     function setOneTimeContribution(uint setAmountInWei) external onlyCreator {
@@ -394,6 +394,8 @@ contract SinglePatreon {
     }
 /*********************************************GETTER FUNCTIONS AND FALLBACK FUNCTION**************************************************************************/
 
+/* basically don't need these, since ALL PUBLIC FUNCTIONS HAVE GETTERS
+
     function getOneTimecontribution() constant external returns(uint singleDonation) {
         return singleDonationAmount;
     }
@@ -411,6 +413,11 @@ contract SinglePatreon {
     function getTotalSingleContributors() constant external returns(uint _numberOfSingleContributions) {
         return numberOfSingleContributions;
     }
+    function getOwnerSinglePatreon() constant external returns (address _owner) {
+        return owner;
+    }
+
+    */
     //owner can only send, the fix any error in withdrawals
     function () onlyOwner {}
     
@@ -431,6 +438,7 @@ contract PatreonFactory {
         owner = msg.sender;
     }
 
+    //its possible this returns is doing nothing, as i grabbed the contract address from LOGS
     function createContract (bytes32 name) external {
         //loop to prevent duplicate names. uint32 to shorten loop (although still 5 billion)
         for (uint32 i = 0; i<names.length; i++) {
