@@ -246,8 +246,8 @@ contract SinglePatreon {
         ledger[monthlyDonationsAvailable] += 12;
         assert(ledger[totalDonationsEver] == ledger[monthlyDonationsAvailable]+ledger[totalDonationsWithdrawn]+ledger[totalDonationsCancelled]);
         
-        ledger[totalEtherEver] += 1 ether;
-        ledger[totalEtherNow] += 1 ether;
+        ledger[totalEtherEver] += msg.value;
+        ledger[totalEtherNow] += msg.value;
         assert(ledger[totalEtherEver] == ledger[totalEtherNow]+ledger[totalEtherWithdrawn]+ledger[totalEtherCancelled]);
 
         LOG_ChangeToFullLedger (ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
@@ -394,8 +394,12 @@ contract SinglePatreon {
     }
 /*********************************************GETTER FUNCTIONS AND FALLBACK FUNCTION**************************************************************************/
 
-/* basically don't need these, since ALL PUBLIC FUNCTIONS HAVE GETTERS
+    function getContractNumber() constant external returns (uint) {
+        return contractNumber;
+    }
 
+//basically don't need these, since ALL PUBLIC FUNCTIONS HAVE GETTERS
+//but three of them are in the front end UI, so I gotta keep em for now 
     function getOneTimecontribution() constant external returns(uint singleDonation) {
         return singleDonationAmount;
     }
@@ -417,7 +421,6 @@ contract SinglePatreon {
         return owner;
     }
 
-    */
     //owner can only send, the fix any error in withdrawals
     function () onlyOwner {}
     
