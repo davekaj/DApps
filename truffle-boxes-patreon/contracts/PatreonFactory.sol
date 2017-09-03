@@ -9,7 +9,7 @@ contract SinglePatreon {
     bytes32 public name; //contract name 
     uint public singleDonationAmount;
     uint public monthlyDonationAmount;
-    uint public contractBalance = this.balance;
+    uint public contractBalance = this.balance; //having trouble getting this from web3. also in LOGGED events. this.balance seems to be working though
 
     uint public contractNumber;
     uint dynamicFirstOfMonth = 1498867200; //starts on July 1st, 2017. JUST REMOVED THIS FROM function and made state variable. This should fix problem of creator doing unlimited withdrawals
@@ -113,19 +113,22 @@ contract SinglePatreon {
     event LOG_ChangeToSingleDonatorStruct (uint totalDonationStart, uint totalRemaining, uint monthsRemaining, uint paymentPerMonth, address donator);
     event LOG_ChangeToFullLedger (uint allPatreonsEver, uint patreonsNow, uint patreonsFinished, uint patreonsCancelled, uint totalDonationsEver, uint monthlyDonationsAvailable, uint totalDonationsWithdrawn, uint totalDonationsCancelled, uint totalEtherEver, uint totalEtherNow, uint totalEtherWithdrawn, uint totalEtherCancelled, uint monthlyDonation);
     event LOG_ChangeToContractBalance (uint contractBalance);
-    event LOG_HealthCheck(bytes32 message, uint diff, uint balance, uint ledgerBalance);
+    event LOG_HealthCheck(bytes32 message, int diff, uint balance, uint ledgerBalance);
 
 /*********************************************CONSTRUCTOR FUNCTIONS AND MAIN FUNCTIONS**************************************************************************/
-	function healthCheck() internal {
-		uint diff = contractBalance + ledger[totalEtherNow]; //THIS MIGHT FAIL ON MONTHLY CONTRIBUTION. BECAUSE USER SENDS SOME ETHER, BEFORE LEDGER CAN UPDATE
+	
+
+    function healthCheck() internal {
+        //- msg.value becuase the contract balance increases at start from payable functions, and ledger only decreases at end of payable function
+    	int diff = int(this.balance-msg.value) - int(ledger[totalEtherNow]);//needs to be int for negative
 		if (diff == 0) {
 			return; // everything ok.
 		}
 		if (diff > 0) {
-			LOG_HealthCheck("Balance too high", diff, contractBalance, ledger[totalEtherNow]);
+			LOG_HealthCheck("Balance too high", diff, this.balance, ledger[totalEtherNow]);
 			maintenance_mode = maintenance_BalTooHigh;
 		} else {
-			LOG_HealthCheck("Balance too low", diff, contractBalance, ledger[totalEtherNow]);
+			LOG_HealthCheck("Balance too low", diff, this.balance, ledger[totalEtherNow]);
 			maintenance_mode = maintenance_Emergency;
 		}
 	}
@@ -249,6 +252,7 @@ contract SinglePatreon {
         ledger[totalEtherEver] += msg.value;
         ledger[totalEtherNow] += msg.value;
         assert(ledger[totalEtherEver] == ledger[totalEtherNow]+ledger[totalEtherWithdrawn]+ledger[totalEtherCancelled]);
+
 
         LOG_ChangeToFullLedger (ledger[allPatreonsEver], ledger[patreonsNow], ledger[patreonsFinished], ledger[patreonsCancelled], ledger[totalDonationsEver], ledger[monthlyDonationsAvailable], ledger[totalDonationsWithdrawn], ledger[totalDonationsCancelled], ledger[totalEtherEver], ledger[totalEtherNow], ledger[totalEtherWithdrawn], ledger[totalEtherCancelled], ledger[monthlyDonation]);
         LOG_ChangeToSingleDonatorStruct (pd.totalDonationStart,  pd.totalRemaining,  pd.monthsRemaining,  pd.paymentPerMonth,  msg.sender); 
@@ -421,6 +425,9 @@ contract SinglePatreon {
         return owner;
     }
 
+    function getPatreonID(address patreonsAddress) constant external returns (uint _id) {
+        return patreonIDs[patreonsAddress];
+    }
     //owner can only send, the fix any error in withdrawals
     function () onlyOwner {}
     
@@ -456,6 +463,7 @@ contract PatreonFactory {
         
         LOG_NewContractAddress (newContract, msg.sender);
     } 
+
 
     function getName(uint i) constant external returns(bytes32 contractName) {
         return names[i];
