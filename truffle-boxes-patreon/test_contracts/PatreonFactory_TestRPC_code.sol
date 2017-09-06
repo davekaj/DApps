@@ -1,9 +1,3 @@
-/**************************************************************************************************************************
-Note that dynamicFirstOfMonth and monthly counter need to be changed.
-they shouldn't be hardcoded in. they could be figured out from NOW (although now can be manipulated)
-it starts at july 2017 right now. if it were july 15th you could withdraw once. aug 2nd, twice, etc
-***************************************************************************************************************************/
-
 pragma solidity ^0.4.13;
 
 contract SinglePatreon {
@@ -19,9 +13,9 @@ contract SinglePatreon {
     uint32 public numberOfSingleContributions;
 
     //monthly Counter Variables
-    //@@@@@@@@@@@@@@@TESTING  both are currently july. good. This allows for more testing
-    uint dynamicFirstOfMonth = 1498867200; //starts on July 1st, 2017. 
-    uint8 monthlyCounter = 6; //because we are starting on july 2017, and its 6th spot in a 12 spot array
+    //both are currently july. good 
+    uint dynamicFirstOfMonth = 1498867200; //starts on July 1st, 2017. JUST REMOVED THIS FROM function and made state variable. This should fix problem of creator doing unlimited withdrawals
+    uint8 monthlyCounter = 6; //because we are starting on aug 2017, and its 7th spot in a 12 spot array ************CHANGED TO 6 for TEST
     uint64 leapYearCounter = 1583020800; //did not add an assert for this, as it can't be changed easily
     
     //maintenance modes 
@@ -207,7 +201,6 @@ contract SinglePatreon {
         
         //to ensure that no one makes a double contribution, if it != 0, throw, unless you are the very first one. because all will be 0 if they haven't been created yet
         //also donators.length is needed since donators[0] doesnt exist at the start. it has to be first in the logic, otherwise fail
-        //note that this means that if someone contributes, then cancles, they can't ever contribute again (could just go from a different address though if they want)
         if((donators.length >= 1) && (patreonIDs[msg.sender] != 0 || donators[0].donator == msg.sender)) {
             revert();
             }
@@ -300,9 +293,9 @@ contract SinglePatreon {
            revert();
        }
        //@@@@@@@@@@@@@@@TESTING. GET RID OF TEMP, PUT IN DYNAMIC NORMAL
-       // uint tempDynamicFirstOfMonthForTesting = 1498867200;
+        uint tempDynamicFirstOfMonthForTesting = 1498867200;
         //@@@@@@@@@@@@@@@TESTING
-        if (now > dynamicFirstOfMonth) { //accoridng to this, if guy is two months behind, he can only withdraw one at a time. will need to do 2 transactions
+        if (now > tempDynamicFirstOfMonthForTesting) { //accoridng to this, if guy is two months behind, he can only withdraw one at a time. will need to do 2 transactions
            //@@@@@@@@@@@@@@@TESTING comment out oneDaySpeedBump
             oneDaySpeedBump();//must be inside this if statement since if creator accidentally calls contract an hour early, he doesnt negate himself a day
             uint amountToWithdraw = ledger[patreonsNow]*ledger[monthlyDonation];
@@ -355,14 +348,14 @@ contract SinglePatreon {
     //allows for contract to be run and have correct unix time stamps for each month
     function updateMonthlyCounter() internal {
         //@@@@@@@@@@@@@@@TESTING
-       // uint tempDynamicFirstOfMonthForTesting = 1498867200;
+        uint tempDynamicFirstOfMonthForTesting = 1498867200;
         //make sure months are not trailing off
         assert(monthlyCounter <= 11);
         assert(monthlyCounter >= 0);
 
         //@@@@@@@@@@@@@@@TESTING
         //making sure no overflow has happened
-        assert(dynamicFirstOfMonth + 1 > 1498867200);
+        assert(tempDynamicFirstOfMonthForTesting + 1 > 1498867200);
 
 
         uint64 leapYearCycle = 126230400;//this number is 4 years plus a day, and it reoccuring on a consistent basis

@@ -15,7 +15,6 @@ import './App.css'
 const contract = require('truffle-contract')
 const singleContract = contract(SinglePatreon)
 const patreonFactory = contract(PatreonFactory)
-const rinkbyAddressFactory = "0xF91c2d4afDb40Ff618e11003f0d00AE38dd9A0af";
 
 
 
@@ -66,8 +65,7 @@ class App extends React.Component {
 
     // Get accounts.
     this.state.web3.eth.getAccounts((error, accounts) => {
-      //@@@@@@@@@@@TESTNET RINKBY ADDRESS
-      patreonFactory.at(rinkbyAddressFactory).then((instance) => {
+      patreonFactory.deployed().then((instance) => {
         patreonInstance = instance
         return patreonInstance.createContract(this.state.contractName, { from: accounts[0] })
       }).then((result) => {
@@ -94,8 +92,7 @@ class App extends React.Component {
     var _factoryAddress;
 
     this.state.web3.eth.getAccounts((error, accounts) => {
-      //@@@@@@@@@@@TESTNET RINKBY ADDRESS
-      patreonFactory.at(rinkbyAddressFactory).then((instance) => {
+      patreonFactory.deployed().then((instance) => {
         patreonInstance = instance
         _factoryAddress = patreonInstance.address;
         //get the name array
