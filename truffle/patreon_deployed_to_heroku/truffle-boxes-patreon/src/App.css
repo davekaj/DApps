@@ -72,3 +72,10 @@ body {
 input {
   font-size: 10px;
 }
+
+.text-white {
+  color: white;
+}
+.smaller-text{
+  font-size: 10px;
+}

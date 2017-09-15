@@ -33,11 +33,13 @@ class App extends React.Component {
       contractName: "",
       childVisible: false,
       patreonFactoryAddress: "",
+      creator: "",
+      accountZero: "",
     }
 
     this.onInput = this.onInput.bind(this);
     this.getArraysFromFactory = this.getArraysFromFactory.bind(this);
-    
+
   }
 
   //mounts, gets web3, calls getArrays
@@ -72,7 +74,7 @@ class App extends React.Component {
         return patreonInstance.createContract(this.state.contractName, { from: accounts[0] })
       }).then((result) => {
         console.log(result);// note that this returns a general block tx, recipt, and logs array. does NOT return what solidity function returns
-        this.getArraysFromFactory();        
+        this.getArraysFromFactory();
         //code to do an EVENT WATCH. Need more of these
         var event = patreonInstance.LOG_NewContractAddress()
         event.watch(function (error, result) {
@@ -122,6 +124,7 @@ class App extends React.Component {
           contractAddressArray: _contractAddressArray,
           originalCreatorArray: _originalCreatorArray,
           patreonFactoryAddress: _factoryAddress,
+          accountZero: accounts[0],
         })
         this.combineArrays(); // don't need to actually return this. so i didnt
       })
@@ -152,9 +155,21 @@ class App extends React.Component {
   //just sets state to pick a contract. A little buggy at the start, it starts off on first contract created but it hasn't actually been put into the state yet
   donatorChoosesContract(e) {
     let selectedContract = e.target.value;
+    let creator = "";
+
+    //find the creator from our combined array in state
+    for (let i = 0; i < this.state.combinedArrays.length; i++) {
+      let returnIfNotNegativeOne = this.state.combinedArrays[i].indexOf(selectedContract);
+      if (returnIfNotNegativeOne != -1) {
+        creator = this.state.combinedArrays[i][2];
+        break;
+      }
+
+    }
     this.setState({
       contractPickedByDonator: selectedContract,
       childVisible: true,
+      creator: creator,
     })
   }
 
@@ -175,10 +190,35 @@ class App extends React.Component {
     return (
       <div className="App">
         <nav className="navbar pure-menu pure-menu-horizontal">
-          <a href="#" className="">Patreon Donation dApp with Truffle and React</a>
+          <a href="#" className="">Patreon Donation dApp with Truffle and React &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </a>
+          <div className="text-white">Please note: Because this dApp interacts with a real ethereum (testnet) blockchain, there is about a 15-20 second delay for each call to the blockchain.</div>
+          <div className="text-white">Your Current Web3 Injected Account: {this.state.accountZero}</div>
+        
         </nav>
         <br />
         <main className="container">
+          <div className="test-border col-xs-12 col-sm-6 smaller-text">
+            <h4>What is the Patreon Donation dApp?</h4>
+            <p>This is a simple proof of concept dApp that shows how easy it can be to set up a donating website, similar to what patreon.com does. They allow
+              artists and creators to create a page on their platform and post content that appeals to their followers. These users are known as the creators. The patreons 
+              are the followers, and they donate a certain amount of money to the creators because they like their art and they
+              want them to continue creating! </p>
+            <h4>How to use this dApp</h4>
+            <p>You can create your own "Single Patreon" contract through the Patreon Factory Contract. You can give it a name.</p>
+            <p>You can then find that contract on the testnet once its been deployed, and set one time contribution fees and monthly contribution fees.</p>
+            <p>Once that is set up, other people with ethereum accounts can come along and send you ether.</p>
+            <p>Once the ether is sent to the contract, the creator can withdraw some</p>
+            <p>At any time, the patreon can cancle their donations</p>
+            <h4>How it works</h4>
+            <p>One time contibutions are sent directly to the patreon right away</p>
+            <p>Monthly contributions are done using a pull method, by sending a years worth of donations up front. Each month, 1/12th of the years donation can be withdrawn by the creator. This is done 
+              because it is an easier method of getting every patreon to pay each month, rather than pinging them on the first of every month and hoping they follow through. (It is safer as well) </p>
+            <p>The patreon can cancle his donation, say two months into his twelve month commitment. He will then be refunded the other 10 months of contributions by the contract.</p>
+            <p>Yellow and Red Buttons = State chaning calls to blockchain (15-20 Second Delay)</p>
+            <p>Blue Buttons = Calls to Blockchains (Quicker)</p>
+            <p>That's it in a nutshell!</p>
+          </div>
+          <br></br>
           <div className="test-border col-xs-12 col-sm-6">
             <h1>Patreon Factory Contract ({this.state.patreonFactoryAddress}) Creator Choices</h1 ><hr />
             <div className="row">
@@ -191,7 +231,7 @@ class App extends React.Component {
           <div className="test-border col-xs-12 col-sm-6">
             <h1>Patreon Factory Contract Donator Choices</h1><hr />
             <div>Choose the contract you want to interact with: &nbsp;
-                <select onClick={(e) => { this.donatorChoosesContract(e) }}>
+                <select onChange={(e) => { this.donatorChoosesContract(e) }}>
                 <option>Select the contract from this Dropdown Menu</option>
                 {dropdownContracts}
               </select>
@@ -199,7 +239,7 @@ class App extends React.Component {
           </div>
           <div>
             {this.state.childVisible ?
-              <SinglePatreonContractUI chosenContract={this.state.contractPickedByDonator}></SinglePatreonContractUI> : null
+              <SinglePatreonContractUI creatorOfContract={this.state.creator} chosenContract={this.state.contractPickedByDonator} web3Props={this.state.web3} ></SinglePatreonContractUI> : null
             }
           </div>
         </main>
@@ -212,34 +252,36 @@ class SinglePatreonContractUI extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      web3: null,
+      web3: this.props.web3Props,
       singleDonationFeeBigNumber: {},
-      singleDonationFeeBase: 0,
-      singleDonationFeeExponent: 0,
+      singleDonationFeeInEther: 0,
       contractBalance: {},
       contractBalanceEtherRounded: 0,
-      monthlyAmount: {},
+      monthlyAmountBigNumber: {},
       monthlyAmountEtherRounded: 0,
       setOneTimeValue: 0,
       setMonthlyValue: 0,
     }
     this.setOneTimeContribution = this.setOneTimeContribution.bind(this);
     this.getOneTimecontribution = this.getOneTimecontribution.bind(this);
+    this.getMonthly = this.getMonthly.bind(this);
     this.getContractBalance = this.getContractBalance.bind(this);
     this.onInputSinglePatreon = this.onInputSinglePatreon.bind(this);
   }
 
-  //haven't figured out how to only have to do this once. but its fine
+  //need to have willMount for the first case, because willReceiveProps happens after mounting and doesnt update.
   componentWillMount() {
-    getWeb3
-      .then(results => {
-        this.setState({
-          web3: results.web3
-        })
-      })
-      .catch(() => {
-        console.log('Error finding web3.')
-      })
+    this.getMonthly();
+    this.getOneTimecontribution();
+    this.getContractBalance();
+  }
+
+
+  //correctly updates the UI when the contract chosen is switched
+  componentWillReceiveProps() {
+    this.getMonthly();
+    this.getOneTimecontribution();
+    this.getContractBalance();
   }
 
   //allows creator to set a one time contribution amount
@@ -254,6 +296,7 @@ class SinglePatreonContractUI extends React.Component {
         return contractInstance.setOneTimeContribution(oneTimeCont, { from: accounts[0] });
       }).then((result) => {
         console.log(result);
+        this.getOneTimecontribution();
       })
     })
   }
@@ -266,10 +309,11 @@ class SinglePatreonContractUI extends React.Component {
     this.state.web3.eth.getAccounts((error, accounts) => {
       singleContract.at(this.props.chosenContract).then((instance) => {
         contractInstance = instance;
-        let oneTimeCont = this.state.web3.toWei(this.state.setMonthlyValue, 'ether');
-        return contractInstance.setMonthlyContribution(oneTimeCont, { from: accounts[0] });
+        let monthlyCont = this.state.web3.toWei(this.state.setMonthlyValue, 'ether');
+        return contractInstance.setMonthlyContribution(monthlyCont, { from: accounts[0] });
       }).then((result) => {
         console.log(result);
+        this.getMonthly();
       })
     })
   }
@@ -285,13 +329,10 @@ class SinglePatreonContractUI extends React.Component {
         contractInstance = instance;
         return contractInstance.getOneTimecontribution.call();
       }).then((result) => {
-        //console.log(result);
-        //console.log(result.s);
-        //console.log(result.e);
+        let convertToEther = result.dividedBy("1000000000000000000").toNumber();
         this.setState({
+          singleDonationFeeInEther: convertToEther,
           singleDonationFeeBigNumber: result,
-          singleDonationFeeBase: result.s,
-          singleDonationFeeExponent: result.e,
         })
       })
     })
@@ -305,7 +346,7 @@ class SinglePatreonContractUI extends React.Component {
     this.state.web3.eth.getAccounts((error, accounts) => {
       singleContract.at(this.props.chosenContract).then((instance) => {
         contractInstance = instance;
-        let sendAmount = this.state.web3.toWei(this.state.setOneTimeValue, 'ether');
+        let sendAmount = this.state.web3.toWei(this.state.singleDonationFeeInEther, 'ether');
         return contractInstance.oneTimeContribution({ value: sendAmount, from: accounts[0] });
       }).then((result) => {
         console.log(result);
@@ -321,7 +362,7 @@ class SinglePatreonContractUI extends React.Component {
     this.state.web3.eth.getAccounts((error, accounts) => {
       singleContract.at(this.props.chosenContract).then((instance) => {
         contractInstance = instance;
-        let sendAmount = this.state.web3.toWei(this.state.setMonthlyValue, 'ether');
+        let sendAmount = this.state.web3.toWei(this.state.monthlyAmountEtherRounded, 'ether');
         return contractInstance.monthlyContribution({ value: sendAmount, from: accounts[0] });
       }).then((result) => {
         console.log(result);
@@ -372,7 +413,7 @@ class SinglePatreonContractUI extends React.Component {
         //console.log(result);
         // console.log(result.c[0] * 0.0001);
         this.setState({
-          monthlyAmount: result,
+          monthlyAmountBigNumber: result,
           monthlyAmountEtherRounded: result.c[0] * 0.0001
         })
       })
@@ -418,6 +459,7 @@ class SinglePatreonContractUI extends React.Component {
         <br />
         <div className="chosen-Contract test-border col-xs-12 col-sm-6">
           <h3> Chosen Contract: {this.props.chosenContract}</h3>
+          <h3>Contract Creator: {this.props.creatorOfContract}</h3>
         </div>
         <br />
 
@@ -431,7 +473,7 @@ class SinglePatreonContractUI extends React.Component {
           </div>
 
           <div className="row">
-            <div className="col-xs-5">Set your one Monthly contribution fee in Ether:</div>
+            <div className="col-xs-5">Set your one Monthly contribution fee in Ether (Must be divisible by 12):</div>
             <button className="col-xs-2 btn btn-warning" onClick={() => { this.setMonthly() }}>Set</button>
             <input className="col-lg-offset-1 col-xs-3" id="monthlyDonation" type="text" value={this.state.value} onChange={this.onInputSinglePatreon} placeholder="Enter monthly donation"></input>
           </div>
@@ -455,7 +497,7 @@ class SinglePatreonContractUI extends React.Component {
           <div className="row">
             <div className="col-xs-5">See the one time fee to see if you want to pay:</div>
             <button className="col-xs-2 btn btn-primary" onClick={() => { this.getOneTimecontribution() }}>Get Fee</button>
-            <div className="col-xs-5">The fee is : {this.state.singleDonationFeeBase * Math.pow(10, this.state.singleDonationFeeExponent)} wei</div>
+            <div className="col-xs-5">The fee is : {this.state.singleDonationFeeInEther} ether</div>
           </div>
           <div className="row">
             <div className="col-xs-5">See the yearly amount you'd pay, which is released each month:</div>
@@ -465,7 +507,7 @@ class SinglePatreonContractUI extends React.Component {
           <div className="row">
             <div className="col-xs-5">Send one time contibution:</div>
             <button className="col-xs-2 btn btn-warning" onClick={() => { this.sendOneTimeContribution() }}>Send</button>
-            <div className="col-xs-5">IF YOU CLICK THIS YOU WILL SEND AWAY  {this.state.monthlyAmountEtherRounded /12 } Ether</div>
+            <div className="col-xs-5">IF YOU CLICK THIS YOU WILL SEND AWAY  {this.state.singleDonationFeeInEther} Ether</div>
 
           </div>
           <div className="row">
